@@ -6,7 +6,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 app = Flask(__name__)
 # مفتاح سري لتوقيع تاريخ بداية التجربة
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "store-manager-demo-secret-2026")
-TRIAL_DAYS = 3
+TRIAL_DAYS = 1
 TRIAL_COOKIE = "store_manager_trial"
 TRIAL_SIGNER = URLSafeSerializer(app.config["SECRET_KEY"], salt="store-manager-trial")
 
