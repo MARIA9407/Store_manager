@@ -213,8 +213,14 @@ def sales():
         try: pi=int(request.form["product"]); qty=int(request.form["quantity"]); color_input=request.form["color"].strip()
         except:return redirect("/sales")
         if 0<=pi<len(d["products"]) and qty>0:
-            p=d["products"][pi]; color=next((c for c in p["colors"] if c.lower()==color_input.lower()),None)
-            if color is not None and qty<=p["colors"][color]:
+                p = d["products"][pi]
+    color_input_clean = color_input.strip().lower()
+    color = next(
+        (c for c in p["colors"] if c.strip().lower() == color_input_clean), None
+    )
+    if color is not None and qty <= p["colors"][color]:
+
+    
                 p["colors"][color]-=qty; inv=d["invoice_number"]; total=qty*p["price"]; now=datetime.now()
                 d["sales"].append({"invoice":inv,"product":p["name"],"color":color,"quantity":qty,"price":p["price"],"total":total,"date":now.strftime("%Y-%m-%d"),"time":now.strftime("%H:%M")})
                 d["invoice_number"]+=1;save_data(d);return redirect(f"/invoice/{inv}")
