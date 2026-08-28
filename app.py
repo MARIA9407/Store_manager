@@ -1,3 +1,4 @@
+
 from flask import Flask, request, redirect, render_template_string
 import json, os
 from datetime import datetime, timedelta
@@ -7,7 +8,6 @@ DATA_FILE = "store_data.json"
 
 def load_data():
     if not os.path.exists(DATA_FILE):
-        # تفعيل التجربة لمدة 3 أيام من أول تشغيل تلقائياً
         expiry_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
         return {"products": [], "sales": [], "invoice_number": 1, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "expiry_date": expiry_date}
     try:
@@ -43,21 +43,10 @@ label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{bord
 .invoice-total{font-size:24px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #printable-area, #printable-area * {
-    visibility: visible;
-  }
-  #printable-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-  }
-  .no-print {
-    display: none !important;
-  }
+  body * { visibility: hidden; }
+  #printable-area, #printable-area * { visibility: visible; }
+  #printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
 }
 """
 
@@ -66,7 +55,6 @@ PAGE = """<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><
 def page(title, body, **ctx):
     return render_template_string(PAGE, title=title, style=STYLE, body=render_template_string(body, **ctx))
 
-# التحقق من انتهاء التجربة
 def check_trial():
     d = load_data()
     try:
@@ -80,12 +68,11 @@ def check_trial():
 @app.route("/")
 def home():
     if not check_trial():
-        return page("انتهت الفترة التجريبية", '<div class="header"><h1>⏳ انتهت التجربة المجانية</h1></div><div class="container"><div class="card" style="text-align:center;"><p style="font-size:20px;">عذراً، انتهت مدة التجربة المجانية (3 أيام). يرجى التواصل مع مطور التطبيق لتجديد الاشتراك.</p><p style="font-size:18px; color:#2563eb;">📞 تواصل معنا للحصول على النسخة الدائمة.</p></div></div>')
-    
+        return page("انتهت الفترة التجريبية", '<div class="header"><h1>⏳ انتهت التجربة المجانية</h1></div><div class="container"><div class="card" style="text-align:center;"><p style="font-size:20px;">عذراً، انتهت مدة التجربة المجانية (3 أيام). يرجى التواصل مع مطور التطبيق لتجديد الاشتراك.</p></div></div>')
     d=load_data()
     stock=sum(sum(p["colors"].values()) for p in d["products"])
     revenue=sum(s.get("total",0) for s in d["sales"])
-    body="""<div class="header"><h1>🛍️ إدارة المتجر</h1><p>نسخة تجريبية (صالحة لمدة 3 أيام)</p></div>
+    body="""<div class="header"><h1>🛍️ إدارة المتجر</h1><p>نسخة تجريبية</p></div>
     <div class="container">
     <div class="card" style="background:#eef2ff; text-align:center; font-weight:bold; color:#1e40af;">⏳ التجربة المجانية تنتهي في: {{ expiry }}</div>
     <div class="card"><h2>لوحة التحكم</h2><div class="grid">
@@ -112,7 +99,7 @@ def products():
     <div class="info">📦 المخزون:</div>
     {% for c,q in p.colors.items() %}<div class="info">• {{ c }} : {{ q }} قطعة</div>{% endfor %}
     <div class="actions"><a class="btn orange" href="/edit-product/{{ loop.index0 }}">✏️ تعديل</a>
-    <a class="btn red" href="/delete-product/{{ loop.index0 }}" onclick="return confirm('هل أنت متأكد من حذف هذا المنتج؟')">🗑️ حذف</a></div></div>{% endfor %}
+    <a class="btn red" href="/delete-product/{{ loop.index0 }}" onclick="return confirm('هل أنت متأكد من الحذف؟')">🗑️ حذف</a></div></div>{% endfor %}
     {% else %}<div class="empty">لا توجد منتجات حتى الآن.</div>{% endif %}</div></div><a class="back" href="/">← العودة للرئيسية</a>"""
     return page("المنتجات",body,products=d["products"])
 
@@ -125,7 +112,7 @@ def add_product():
         barcode=request.form.get("barcode","").strip()
         colors=[x.strip() for x in request.form.get("colors","").split(",") if x.strip()]
         qs=[x.strip() for x in request.form.get("quantities","").split(",")]
-        try: price=float(request.form.get("price","").replace("DA","").replace("da","").strip())
+        try: price=float(request.form.get("price","").replace("DA","").strip())
         except: price=0
         stock={}
         for i,c in enumerate(colors):
@@ -135,13 +122,32 @@ def add_product():
         if name and barcode and colors and price>0:
             d["products"].append({"name":name,"barcode":barcode,"colors":stock,"price":price});save_data(d)
         return redirect("/products")
-    body="""<div class="header"><h1>➕ إضافة منتج</h1></div><div class="container"><div class="card"><form method="POST">
+    body="""<div class="header"><h1>➕ إضافة منتج</h1></div>
+    <div class="container"><div class="card">
+    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود</button></div>
+    <div id="reader" style="width:100%; display:none; margin-bottom:15px;"></div>
+    <form method="POST">
     <label>اسم المنتج</label><input name="name" placeholder="مثال: حجاب تركي" required>
-    <label>رمز الباركود (Barcode)</label><input name="barcode" placeholder="امسح أو اكتب الكود مثلاً: 123456" required>
+    <label>رمز الباركود (Barcode)</label><input id="barcode" name="barcode" placeholder="امسح أو اكتب الكود..." required>
     <label>الألوان</label><input name="colors" placeholder="beige, noire" required>
     <label>السعر بالدينار</label><input type="number" name="price" placeholder="2500" required>
     <label>الكميات حسب ترتيب الألوان</label><input name="quantities" placeholder="12, 8" required>
-    <button class="btn green" type="submit">✅ حفظ المنتج</button></form></div></div><a class="back" href="/products">← العودة للمنتجات</a>"""
+    <button class="btn green" type="submit">✅ حفظ المنتج</button></form></div></div>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+    function startScanner(fieldId) {
+        var r = document.getElementById('reader');
+        r.style.display = 'block';
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById(fieldId).value = decodedText;
+            html5QrcodeScanner.clear();
+            r.style.display = 'none';
+        }
+        var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess, (err) => {});
+    }
+    </script>
+    <a class="back" href="/products">← العودة للمنتجات</a>"""
     return page("إضافة منتج",body)
 
 @app.route("/edit-product/<int:i>",methods=["GET","POST"])
@@ -188,9 +194,7 @@ def sales():
         color_input=request.form.get("color","").strip()
         try: qty=int(request.form["quantity"])
         except: qty=0
-        
         p = next((prod for prod in d["products"] if prod.get("barcode","").lower() == barcode_input.lower()), None)
-        
         if p and qty > 0:
             color = next((c for c in p["colors"] if c.lower() == color_input.lower()), None)
             if color is not None and qty <= p["colors"][color]:
@@ -198,28 +202,35 @@ def sales():
                 inv = d["invoice_number"]
                 total = qty * p["price"]
                 now = datetime.now()
-                d["sales"].append({
-                    "invoice": inv,
-                    "product": p["name"],
-                    "barcode": p["barcode"],
-                    "color": color,
-                    "quantity": qty,
-                    "price": p["price"],
-                    "total": total,
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M")
-                })
+                d["sales"].append({"invoice": inv, "product": p["name"], "barcode": p["barcode"], "color": color, "quantity": qty, "price": p["price"], "total": total, "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M")})
                 d["invoice_number"] += 1
                 save_data(d)
                 return redirect(f"/invoice/{inv}")
         return redirect("/sales")
         
-    body="""<div class="header"><h1>🛒 المبيعات</h1></div><div class="container"><div class="card"><h2>تسجيل عملية بيع بالباركود</h2>
+    body="""<div class="header"><h1>🛒 المبيعات</h1></div>
+    <div class="container"><div class="card"><h2>تسجيل عملية بيع بالباركود</h2>
+    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود</button></div>
+    <div id="reader" style="width:100%; display:none; margin-bottom:15px;"></div>
     <form method="POST">
-    <label>رمز الباركود للمنتج</label><input name="barcode" placeholder="امسح أو اكتب الباركود هنا..." required>
+    <label>رمز الباركود للمنتج</label><input id="barcode" name="barcode" placeholder="امسح أو اكتب الباركود..." required>
     <label>اللون المطلوب</label><input name="color" placeholder="beige" required>
     <label>الكمية</label><input type="number" name="quantity" min="1" value="1" required>
     <button class="btn green">✅ تسجيل البيع وإنشاء الفاتورة</button></form></div>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script>
+    function startScanner(fieldId) {
+        var r = document.getElementById('reader');
+        r.style.display = 'block';
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById(fieldId).value = decodedText;
+            html5QrcodeScanner.clear();
+            r.style.display = 'none';
+        }
+        var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess, (err) => {});
+    }
+    </script>
     <div class="card"><h2>آخر المبيعات</h2>{% for s in sales %}<div class="product"><div class="product-name">🧾 فاتورة #{{ "%05d"|format(s.invoice) }}</div>
     <div class="info">المنتج: {{ s.product }} (باركود: {{ s.barcode }})</div><div class="info">اللون: {{ s.color }}</div><div class="info">الكمية: {{ s.quantity }}</div>
     <div class="info">الإجمالي: {{ "%.0f"|format(s.total) }} DA</div><div class="info">{{ s.date }} — {{ s.time }}</div>
