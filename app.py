@@ -28,18 +28,19 @@ def save_data(d):
 
 STYLE = """
 *{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#222}
-.header{background:#1f2937;color:#fff;padding:25px 15px;text-align:center}.header h1{margin:0;font-size:30px}
-.container{width:94%;max-width:700px;margin:20px auto}.card,.invoice{background:#fff;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 4px 12px #0001}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.btn{display:block;text-decoration:none;border:0;border-radius:14px;padding:16px 8px;margin-top:10px;background:#2563eb;color:#fff;text-align:center;font-size:18px;font-weight:bold;cursor:pointer}
-.green{background:#16a34a}.red{background:#dc2626}.orange{background:#ea580c}.gray{background:#4b5563}
+.header{background:#1f2937;color:#fff;padding:25px 15px;text-align:center}.header h1{margin:0;font-size:28px}
+.container{width:94%;max-width:750px;margin:20px auto}.card,.invoice{background:#fff;border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 4px 12px #0001}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.btn{display:block;text-decoration:none;border:0;border-radius:14px;padding:16px 8px;margin-top:10px;background:#2563eb;color:#fff;text-align:center;font-size:17px;font-weight:bold;cursor:pointer}
+.green{background:#16a34a}.red{background:#dc2626}.orange{background:#ea580c}.gray{background:#4b5563}.purple{background:#7c3aed}
 input,select{width:100%;padding:14px;margin:8px 0 15px;border:1px solid #d1d5db;border-radius:12px;font-size:17px;background:#fff}
 label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{border:1px solid #ddd;border-radius:15px;padding:16px;margin-top:13px}
-.product-name{font-size:23px;font-weight:bold;margin-bottom:8px}.info{font-size:17px;margin-top:8px}.actions{display:flex;gap:8px}.actions a{flex:1}
-.stat{text-align:center;padding:20px;border-radius:15px;background:#eef2ff;margin-bottom:12px}.stat-number{font-size:27px;font-weight:bold}
-.empty{text-align:center;padding:25px;color:#777;font-size:18px}.warning{background:#fff7ed;border:1px solid #fed7aa;padding:15px;border-radius:13px;margin-top:10px}
+.product-name{font-size:21px;font-weight:bold;margin-bottom:8px}.info{font-size:16px;margin-top:6px}.actions{display:flex;gap:8px}.actions a{flex:1}
+.stat{text-align:center;padding:15px;border-radius:15px;background:#eef2ff;margin-bottom:12px}.stat-number{font-size:24px;font-weight:bold}
+.empty{text-align:center;padding:20px;color:#777;font-size:17px}.warning{background:#fff7ed;border:1px solid #fed7aa;padding:15px;border-radius:13px;margin-top:10px}
 .back{display:block;text-align:center;margin:20px;color:#2563eb;text-decoration:none;font-size:18px}
-.invoice-title{text-align:center;font-size:28px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:12px 0;font-size:18px}
-.invoice-total{font-size:24px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
+.invoice-title{text-align:center;font-size:26px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:10px 0;font-size:17px}
+.invoice-total{font-size:22px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
+.report-section{margin-top:15px;padding-top:15px;border-top:1px solid #eee}
 
 @media print {
   body * { visibility: hidden; }
@@ -72,18 +73,18 @@ def home():
     stock=sum(sum(p["colors"].values()) for p in d["products"])
     revenue=sum(s.get("total",0) for s in d["sales"])
     profit=sum(s.get("profit",0) for s in d["sales"])
-    body="""<div class="header"><h1>🛍️ إدارة المتجر</h1><p>نسخة تجريبية مع حساب الأرباح</p></div>
+    body="""<div class="header"><h1>🛍️ لوحة تحكم المتجر</h1><p>نظام إدارة المبيعات والأرباح المتقدم</p></div>
     <div class="container">
     <div class="card" style="background:#eef2ff; text-align:center; font-weight:bold; color:#1e40af;">⏳ التجربة المجانية تنتهي في: {{ expiry }}</div>
-    <div class="card"><h2>لوحة التحكم</h2><div class="grid">
+    <div class="card"><h2>الرئيسية والعمليات</h2><div class="grid">
     <a class="btn" href="/products">📦<br>المنتجات</a><a class="btn green" href="/sales">🛒<br>المبيعات</a>
-    <a class="btn" href="/statistics">📊<br>الإحصائيات والأرباح</a><a class="btn" href="/search">🔎<br>البحث</a>
+    <a class="btn purple" href="/statistics">📊<br>التقارير والأرباح</a><a class="btn" href="/search">🔎<br>البحث</a>
     <a class="btn red" href="/low-stock">⚠️<br>المخزون المنخفض</a><a class="btn gray" href="/add-product">➕<br>إضافة منتج</a>
-    </div></div><div class="card"><h2>📊 ملخص المتجر</h2>
+    </div></div><div class="card"><h2>📊 نظرة عامة</h2>
     <div class="stat"><div class="stat-number">{{ pc }}</div>عدد المنتجات</div>
     <div class="stat"><div class="stat-number">{{ stock }}</div>إجمالي القطع في المخزون</div>
-    <div class="stat"><div class="stat-number">{{ "%.0f"|format(revenue) }} DA</div>إجمالي المبيعات</div>
-    <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(profit) }} DA</div>إجمالي صافي الربح</div>
+    <div class="stat"><div class="stat-number">{{ "%.0f"|format(revenue) }} DA</div>إجمالي المبيعات العامة</div>
+    <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(profit) }} DA</div>إجمالي صافي الأرباح</div>
     </div></div>"""
     return page("إدارة المتجر",body,pc=len(d["products"]),stock=stock,revenue=revenue,profit=profit,expiry=d["expiry_date"])
 
@@ -91,14 +92,14 @@ def home():
 def products():
     if not check_trial(): return redirect("/")
     d=load_data()
-    body="""<div class="header"><h1>📦 المنتجات</h1></div><div class="container"><div class="card">
+    body="""<div class="header"><h1>📦 إدارة المنتجات</h1></div><div class="container"><div class="card">
     <a class="btn green" href="/add-product">➕ إضافة منتج جديد</a>
     {% if products %}{% for p in products %}<div class="product">
     <div class="product-name">{{ p.name }}</div>
-    <div class="info">🏷️ الباركود: <strong>{{ p.barcode }}</strong></div>
+    <div class="info">🏷️ الباركود: <strong>{{ p.barcode if p.barcode else 'بدون باركود' }}</strong></div>
     <div class="info">📥 ثمن الشراء: {{ "%.0f"|format(p.cost_price) }} DA</div>
     <div class="info">💰 سعر البيع: {{ "%.0f"|format(p.price) }} DA</div>
-    <div class="info">📦 المخزون:</div>
+    <div class="info">📦 المخزون حسب الألوان:</div>
     {% for c,q in p.colors.items() %}<div class="info">• {{ c }} : {{ q }} قطعة</div>{% endfor %}
     <div class="actions"><a class="btn orange" href="/edit-product/{{ loop.index0 }}">✏️ تعديل</a>
     <a class="btn red" href="/delete-product/{{ loop.index0 }}" onclick="return confirm('هل أنت متأكد من الحذف؟')">🗑️ حذف</a></div></div>{% endfor %}
@@ -123,21 +124,21 @@ def add_product():
             try:q=int(qs[i])
             except:q=0
             stock[c]=q
-        if name and barcode and colors and price>0:
+        if name and colors and price>0:
             d["products"].append({"name":name,"barcode":barcode,"cost_price":cost_price,"price":price,"colors":stock})
             save_data(d)
         return redirect("/products")
-    body="""<div class="header"><h1>➕ إضافة منتج</h1></div>
+    body="""<div class="header"><h1>➕ إضافة منتج جديد</h1></div>
     <div class="container"><div class="card">
-    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود</button></div>
+    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود (اختياري)</button></div>
     <div id="reader" style="width:100%; display:none; margin-bottom:15px;"></div>
     <form method="POST">
-    <label>اسم المنتج</label><input name="name" placeholder="مثال: حجاب تركي" required>
-    <label>رمز الباركود (Barcode)</label><input id="barcode" name="barcode" placeholder="امسح أو اكتب الكود..." required>
-    <label>ثمن الشراء للقطعة (DA)</label><input type="number" name="cost_price" placeholder="1800" required>
-    <label>سعر البيع للقطعة (DA)</label><input type="number" name="price" placeholder="2500" required>
-    <label>الألوان</label><input name="colors" placeholder="beige, noire" required>
-    <label>الكميات حسب ترتيب الألوان</label><input name="quantities" placeholder="12, 8" required>
+    <label>اسم المنتج</label><input name="name" placeholder="مثال: قندورة صيفية" required>
+    <label>رمز الباركود (اختياري - اتركه فارغاً إذا لم يوجد)</label><input id="barcode" name="barcode" placeholder="امسح الباركود أو اتركه فارغاً...">
+    <label>ثمن الشراء للقطعة (DA)</label><input type="number" name="cost_price" placeholder="1500" required>
+    <label>سعر البيع للقطعة (DA)</label><input type="number" name="price" placeholder="2200" required>
+    <label>الألوان المتاحة (مفصولة بفاصلة)</label><input name="colors" placeholder="أحمر, أزرق, أسود" required>
+    <label>الكميات لكل لون (حسب ترتيب الألوان تماماً)</label><input name="quantities" placeholder="5, 10, 3" required>
     <button class="btn green" type="submit">✅ حفظ المنتج</button></form></div></div>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
@@ -179,7 +180,7 @@ def edit_product(i):
         save_data(d);return redirect("/products")
     body="""<div class="header"><h1>✏️ تعديل المنتج</h1></div><div class="container"><div class="card"><form method="POST">
     <label>اسم المنتج</label><input name="name" value="{{ p.name }}" required>
-    <label>الباركود</label><input name="barcode" value="{{ p.barcode }}" required>
+    <label>الباركود</label><input name="barcode" value="{{ p.barcode }}">
     <label>ثمن الشراء</label><input type="number" name="cost_price" value="{{ p.cost_price }}" required>
     <label>سعر البيع</label><input type="number" name="price" value="{{ p.price }}" required>
     <label>الألوان</label><input name="colors" value="{{ p.colors.keys()|join(', ') }}" required>
@@ -203,7 +204,10 @@ def sales():
         color_input=request.form.get("color","").strip()
         try: qty=int(request.form["quantity"])
         except: qty=0
-        p = next((prod for prod in d["products"] if prod.get("barcode","").lower() == barcode_input.lower()), None)
+        
+        # البحث بالباركود أو بالاسم المباشر إن لم يكن هناك باركود
+        p = next((prod for prod in d["products"] if (prod.get("barcode","") and prod.get("barcode","").lower() == barcode_input.lower()) or prod.get("name","").lower() == barcode_input.lower()), None)
+        
         if p and qty > 0:
             color = next((c for c in p["colors"] if c.lower() == color_input.lower()), None)
             if color is not None and qty <= p["colors"][color]:
@@ -216,7 +220,7 @@ def sales():
                 d["sales"].append({
                     "invoice": inv,
                     "product": p["name"],
-                    "barcode": p["barcode"],
+                    "barcode": p.get("barcode",""),
                     "color": color,
                     "quantity": qty,
                     "price": p["price"],
@@ -230,14 +234,14 @@ def sales():
                 return redirect(f"/invoice/{inv}")
         return redirect("/sales")
         
-    body="""<div class="header"><h1>🛒 المبيعات</h1></div>
-    <div class="container"><div class="card"><h2>تسجيل عملية بيع بالباركود</h2>
-    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود</button></div>
+    body="""<div class="header"><h1>🛒 صفحة المبيعات</h1></div>
+    <div class="container"><div class="card"><h2>تسجيل عملية بيع جديدة</h2>
+    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 مسح باركود بالكاميرا</button></div>
     <div id="reader" style="width:100%; display:none; margin-bottom:15px;"></div>
     <form method="POST">
-    <label>رمز الباركود للمنتج</label><input id="barcode" name="barcode" placeholder="امسح أو اكتب الباركود..." required>
-    <label>اللون المطلوب</label><input name="color" placeholder="beige" required>
-    <label>الكمية</label><input type="number" name="quantity" min="1" value="1" required>
+    <label>رمز الباركود أو اسم المنتج تماماً</label><input id="barcode" name="barcode" placeholder="امسح الكود أو اكتب اسم المنتج..." required>
+    <label>اللون المطلوب</label><input name="color" placeholder="مثال: أحمر" required>
+    <label>الكمية المباعة</label><input type="number" name="quantity" min="1" value="1" required>
     <button class="btn green">✅ تسجيل البيع وإنشاء الفاتورة</button></form></div>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
@@ -253,8 +257,8 @@ def sales():
         html5QrcodeScanner.render(onScanSuccess, (err) => {});
     }
     </script>
-    <div class="card"><h2>آخر المبيعات</h2>{% for s in sales %}<div class="product"><div class="product-name">🧾 فاتورة #{{ "%05d"|format(s.invoice) }}</div>
-    <div class="info">المنتج: {{ s.product }} (باركود: {{ s.barcode }})</div><div class="info">اللون: {{ s.color }}</div><div class="info">الكمية: {{ s.quantity }}</div>
+    <div class="card"><h2>آخر المبيعات المسجلة</h2>{% for s in sales %}<div class="product"><div class="product-name">🧾 فاتورة #{{ "%05d"|format(s.invoice) }}</div>
+    <div class="info">المنتج: {{ s.product }}</div><div class="info">اللون: {{ s.color }} | الكمية: {{ s.quantity }}</div>
     <div class="info">الإجمالي: {{ "%.0f"|format(s.total) }} DA</div>
     <div class="info" style="color:#16a34a; font-weight:bold;">الربح الصافي: {{ "%.0f"|format(s.profit) }} DA</div>
     <div class="info">{{ s.date }} — {{ s.time }}</div>
@@ -266,17 +270,16 @@ def invoice(n):
     if not check_trial(): return redirect("/")
     d=load_data();s=next((x for x in d["sales"] if x.get("invoice")==n),None)
     if not s:return redirect("/sales")
-    body="""<div class="container"><div id="printable-area" class="invoice"><div class="invoice-title">🧾 الفاتورة</div>
+    body="""<div class="container"><div id="printable-area" class="invoice"><div class="invoice-title">🧾 الفاتورة التجارية</div>
     <div class="invoice-line">رقم الفاتورة: <strong>{{ "%05d"|format(s.invoice) }}</strong></div>
     <div class="invoice-line">المنتج: <strong>{{ s.product }}</strong></div>
-    <div class="invoice-line">الباركود: <strong>{{ s.barcode }}</strong></div>
     <div class="invoice-line">اللون: <strong>{{ s.color }}</strong></div>
     <div class="invoice-line">الكمية: <strong>{{ s.quantity }}</strong></div>
     <div class="invoice-line">سعر القطعة: <strong>{{ "%.0f"|format(s.price) }} DA</strong></div>
-    <div class="invoice-total">الإجمالي:<br>{{ "%.0f"|format(s.total) }} DA</div>
-    <div class="invoice-line" style="text-align:center; color:#16a34a; font-weight:bold; margin-top:10px;">الربح الصافي لهذه العملية: {{ "%.0f"|format(s.profit) }} DA</div>
-    <div class="invoice-line">التاريخ: {{ s.date }}<br>الوقت: {{ s.time }}</div>
-    <div style="text-align:center;margin-top:25px;font-size:18px">شكراً لزيارتكم ❤️</div>
+    <div class="invoice-total">المبلغ الإجمالي:<br>{{ "%.0f"|format(s.total) }} DA</div>
+    <div class="invoice-line" style="text-align:center; color:#16a34a; font-weight:bold; margin-top:10px;">صافي ربح هذه العملية: {{ "%.0f"|format(s.profit) }} DA</div>
+    <div class="invoice-line">التاريخ: {{ s.date }} — الوقت: {{ s.time }}</div>
+    <div style="text-align:center;margin-top:25px;font-size:17px">شكراً لثقتكم بنا ❤️</div>
     </div>
     <button class="print-btn no-print" onclick="window.print()">🖨️ طباعة / حفظ الفاتورة</button><a class="btn no-print" href="/sales">← العودة للمبيعات</a></div>"""
     return page("الفاتورة",body,s=s)
@@ -284,26 +287,118 @@ def invoice(n):
 @app.route("/statistics")
 def statistics():
     if not check_trial(): return redirect("/")
-    d=load_data()
-    stock=sum(sum(p["colors"].values()) for p in d["products"])
-    sold=sum(s["quantity"] for s in d["sales"])
-    rev=sum(s["total"] for s in d["sales"])
-    total_profit=sum(s.get("profit",0) for s in d["sales"])
-    body="""<div class="header"><h1>📊 الإحصائيات والأرباح</h1></div><div class="container"><div class="card">
-    <div class="stat"><div class="stat-number">{{ pc }}</div>عدد المنتجات</div>
-    <div class="stat"><div class="stat-number">{{ stock }}</div>القطع الموجودة في المخزون</div>
-    <div class="stat"><div class="stat-number">{{ sold }}</div>القطع المباعة</div>
-    <div class="stat"><div class="stat-number">{{ "%.0f"|format(rev) }} DA</div>إجمالي المبيعات</div>
-    <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(total_profit) }} DA</div>إجمالي صافي الأرباح</div>
-    </div></div><a class="back" href="/">← العودة للرئيسية</a>"""
-    return page("الإحصائيات",body,pc=len(d["products"]),stock=stock,sold=sold,rev=rev,total_profit=total_profit)
+    d = load_data()
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    now_dt = datetime.now()
+    
+    # حساب فترات الزمن
+    day_sales = [s for s in d["sales"] if s.get("date") == today_str]
+    
+    week_ago = now_dt - timedelta(days=7)
+    month_ago = now_dt - timedelta(days=30)
+    
+    week_sales = []
+    month_sales = []
+    
+    for s in d["sales"]:
+        try:
+            s_dt = datetime.strptime(s.get("date", ""), "%Y-%m-%d")
+            if s_dt >= week_ago:
+                week_sales.append(s)
+            if s_dt >= month_ago:
+                month_sales.append(s)
+        except:
+            pass
+
+    # مجاميع الفترات
+    d_rev = sum(s.get("total", 0) for s in day_sales)
+    d_prof = sum(s.get("profit", 0) for s in day_sales)
+    
+    w_rev = sum(s.get("total", 0) for s in week_sales)
+    w_prof = sum(s.get("profit", 0) for s in week_sales)
+    
+    m_rev = sum(s.get("total", 0) for s in month_sales)
+    m_prof = sum(s.get("profit", 0) for s in month_sales)
+
+    # تحليل أكثر وأقل المنتجات مبيعاً
+    product_stats = {}
+    for s in d["sales"]:
+        p_name = s.get("product", "غير معروف")
+        qty = s.get("quantity", 0)
+        product_stats[p_name] = product_stats.get(p_name, 0) + qty
+        
+    sorted_products = sorted(product_stats.items(), key=lambda x: x[1], reverse=True)
+    top_products = sorted_products[:5]
+    low_products = sorted_products[-5:] if len(sorted_products) >= 5 else sorted_products
+
+    body="""<div class="header"><h1>📊 التقارير والإحصائيات الشاملة</h1></div>
+    <div class="container">
+    
+    <!-- مبيعات اليوم -->
+    <div class="card">
+        <h2>📅 مبيعات اليوم</h2>
+        <div class="stat"><div class="stat-number">{{ "%.0f"|format(d_rev) }} DA</div>إيرادات اليوم</div>
+        <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(d_prof) }} DA</div>صافي ربح اليوم</div>
+    </div>
+
+    <!-- مبيعات الأسبوع والشهر -->
+    <div class="card">
+        <h2>📈 مبيعات الأسبوع والشهر</h2>
+        <div class="grid">
+            <div class="stat" style="background:#f0fdf4;">
+                <div style="font-size:14px; font-weight:bold; color:#166534;">آخر 7 أيام</div>
+                <div class="stat-number" style="font-size:20px;">{{ "%.0f"|format(w_rev) }} DA</div>
+                <div style="font-size:13px; color:#15803d; margin-top:5px;">الربح: {{ "%.0f"|format(w_prof) }} DA</div>
+            </div>
+            <div class="stat" style="background:#eff6ff;">
+                <div style="font-size:14px; font-weight:bold; color:#1e40af;">آخر 30 يوم</div>
+                <div class="stat-number" style="font-size:20px;">{{ "%.0f"|format(m_rev) }} DA</div>
+                <div style="font-size:13px; color:#1d4ed8; margin-top:5px;">الربح: {{ "%.0f"|format(m_prof) }} DA</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- أكثر المنتجات مبيعاً -->
+    <div class="card">
+        <h2>🔥 أكثر المنتجات مبيعاً</h2>
+        {% if top_products %}
+            {% for name, q in top_products %}
+                <div class="info" style="display:flex; justify-content:between; padding:8px 0; border-bottom:1px solid #eee;">
+                    <span>📦 <strong>{{ name }}</strong></span>
+                    <span style="color:#2563eb; font-weight:bold;">{{ q }} قطعة مباعة</span>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">لا توجد بيانات مبيعات كافية بعد.</div>
+        {% endif %}
+    </div>
+
+    <!-- أقل المنتجات مبيعاً -->
+    <div class="card">
+        <h2>❄️ أقل المنتجات مبيعاً (الراكدة)</h2>
+        {% if low_products %}
+            {% for name, q in low_products %}
+                <div class="info" style="display:flex; justify-content:between; padding:8px 0; border-bottom:1px solid #eee;">
+                    <span>📦 <strong>{{ name }}</strong></span>
+                    <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة فقط</span>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">لا توجد بيانات مبيعات كافية بعد.</div>
+        {% endif %}
+    </div>
+
+    </div><a class="back" href="/">← العودة للرئيسية</a>"""
+    
+    return page("الإحصائيات والأرباح", body, d_rev=d_rev, d_prof=d_prof, w_rev=w_rev, w_prof=w_prof, m_rev=m_rev, m_prof=m_prof, top_products=top_products, low_products=low_products)
 
 @app.route("/search")
 def search():
     if not check_trial(): return redirect("/")
     q=request.args.get("q","").strip().lower();d=load_data();results=[p for p in d["products"] if q in p["name"].lower() or q in p.get("barcode","").lower()]
-    body="""<div class="header"><h1>🔎 البحث</h1></div><div class="container"><div class="card"><form><input name="q" placeholder="اكتب اسم أو باركود المنتج..." value="{{ q }}"><button class="btn">🔎 بحث</button></form></div>
-    <div class="card">{% for p in results %}<div class="product"><div class="product-name">{{ p.name }}</div><div class="info">الباركود: {{ p.barcode }}</div><div class="info">السعر: {{ "%.0f"|format(p.price) }} DA</div></div>
+    body="""<div class="header"><h1>🔎 البحث عن منتج</h1></div><div class="container"><div class="card"><form><input name="q" placeholder="اكتب اسم أو باركود المنتج..." value="{{ q }}"><button class="btn">🔎 بحث</button></form></div>
+    <div class="card">{% for p in results %}<div class="product"><div class="product-name">{{ p.name }}</div><div class="info">الباركود: {{ p.barcode if p.barcode else 'بدون باركود' }}</div><div class="info">السعر: {{ "%.0f"|format(p.price) }} DA</div></div>
     {% else %}<div class="empty">{% if q %}لم يتم العثور على المنتج.{% else %}اكتب اسم أو باركود المنتج للبحث.{% endif %}</div>{% endfor %}</div></div><a class="back" href="/">← العودة</a>"""
     return page("البحث",body,q=q,results=results)
 
@@ -312,8 +407,8 @@ def low_stock():
     if not check_trial(): return redirect("/")
     d=load_data();low=[(p["name"],p.get("barcode",""),c,q) for p in d["products"] for c,q in p["colors"].items() if q<=3]
     body="""<div class="header"><h1>⚠️ المخزون المنخفض</h1></div><div class="container"><div class="card">
-    {% for name,barcode,color,q in low %}<div class="warning"><strong>{{ name }}</strong> (باركود: {{ barcode }})<br>اللون: {{ color }}<br>المتبقي: {{ q }} قطعة</div>
-    {% else %}<div class="empty">✅ لا توجد منتجات ذات مخزون منخفض.</div>{% endfor %}</div></div><a class="back" href="/">← العودة</a>"""
+    {% for name,barcode,color,q in low %}<div class="warning"><strong>{{ name }}</strong> (باركود: {{ barcode if barcode else 'بدون باركود' }})<br>اللون: {{ color }}<br>المتبقي في المخزون: {{ q }} قطعة فقط</div>
+    {% else %}<div class="empty">✅ ممتاز! لا توجد منتجات ذات مخزون منخفض حالياً.</div>{% endfor %}</div></div><a class="back" href="/">← العودة</a>"""
     return page("المخزون المنخفض",body,low=low)
 
 if __name__ == "__main__":
