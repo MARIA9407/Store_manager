@@ -71,19 +71,21 @@ def home():
     d=load_data()
     stock=sum(sum(p["colors"].values()) for p in d["products"])
     revenue=sum(s.get("total",0) for s in d["sales"])
-    body="""<div class="header"><h1>🛍️ إدارة المتجر</h1><p>نسخة تجريبية</p></div>
+    profit=sum(s.get("profit",0) for s in d["sales"])
+    body="""<div class="header"><h1>🛍️ إدارة المتجر</h1><p>نسخة تجريبية مع حساب الأرباح</p></div>
     <div class="container">
     <div class="card" style="background:#eef2ff; text-align:center; font-weight:bold; color:#1e40af;">⏳ التجربة المجانية تنتهي في: {{ expiry }}</div>
     <div class="card"><h2>لوحة التحكم</h2><div class="grid">
     <a class="btn" href="/products">📦<br>المنتجات</a><a class="btn green" href="/sales">🛒<br>المبيعات</a>
-    <a class="btn" href="/statistics">📊<br>الإحصائيات</a><a class="btn" href="/search">🔎<br>البحث</a>
+    <a class="btn" href="/statistics">📊<br>الإحصائيات والأرباح</a><a class="btn" href="/search">🔎<br>البحث</a>
     <a class="btn red" href="/low-stock">⚠️<br>المخزون المنخفض</a><a class="btn gray" href="/add-product">➕<br>إضافة منتج</a>
     </div></div><div class="card"><h2>📊 ملخص المتجر</h2>
     <div class="stat"><div class="stat-number">{{ pc }}</div>عدد المنتجات</div>
     <div class="stat"><div class="stat-number">{{ stock }}</div>إجمالي القطع في المخزون</div>
     <div class="stat"><div class="stat-number">{{ "%.0f"|format(revenue) }} DA</div>إجمالي المبيعات</div>
+    <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(profit) }} DA</div>إجمالي صافي الربح</div>
     </div></div>"""
-    return page("إدارة المتجر",body,pc=len(d["products"]),stock=stock,revenue=revenue, expiry=d["expiry_date"])
+    return page("إدارة المتجر",body,pc=len(d["products"]),stock=stock,revenue=revenue,profit=profit,expiry=d["expiry_date"])
 
 @app.route("/products")
 def products():
@@ -94,7 +96,8 @@ def products():
     {% if products %}{% for p in products %}<div class="product">
     <div class="product-name">{{ p.name }}</div>
     <div class="info">🏷️ الباركود: <strong>{{ p.barcode }}</strong></div>
-    <div class="info">💰 السعر: {{ "%.0f"|format(p.price) }} DA</div>
+    <div class="info">📥 ثمن الشراء: {{ "%.0f"|format(p.cost_price) }} DA</div>
+    <div class="info">💰 سعر البيع: {{ "%.0f"|format(p.price) }} DA</div>
     <div class="info">📦 المخزون:</div>
     {% for c,q in p.colors.items() %}<div class="info">• {{ c }} : {{ q }} قطعة</div>{% endfor %}
     <div class="actions"><a class="btn orange" href="/edit-product/{{ loop.index0 }}">✏️ تعديل</a>
@@ -111,7 +114,9 @@ def add_product():
         barcode=request.form.get("barcode","").strip()
         colors=[x.strip() for x in request.form.get("colors","").split(",") if x.strip()]
         qs=[x.strip() for x in request.form.get("quantities","").split(",")]
-        try: price=float(request.form.get("price","").replace("DA","").strip())
+        try: cost_price=float(request.form.get("cost_price","0"))
+        except: cost_price=0
+        try: price=float(request.form.get("price","0"))
         except: price=0
         stock={}
         for i,c in enumerate(colors):
@@ -119,7 +124,8 @@ def add_product():
             except:q=0
             stock[c]=q
         if name and barcode and colors and price>0:
-            d["products"].append({"name":name,"barcode":barcode,"colors":stock,"price":price});save_data(d)
+            d["products"].append({"name":name,"barcode":barcode,"cost_price":cost_price,"price":price,"colors":stock})
+            save_data(d)
         return redirect("/products")
     body="""<div class="header"><h1>➕ إضافة منتج</h1></div>
     <div class="container"><div class="card">
@@ -128,8 +134,9 @@ def add_product():
     <form method="POST">
     <label>اسم المنتج</label><input name="name" placeholder="مثال: حجاب تركي" required>
     <label>رمز الباركود (Barcode)</label><input id="barcode" name="barcode" placeholder="امسح أو اكتب الكود..." required>
+    <label>ثمن الشراء للقطعة (DA)</label><input type="number" name="cost_price" placeholder="1800" required>
+    <label>سعر البيع للقطعة (DA)</label><input type="number" name="price" placeholder="2500" required>
     <label>الألوان</label><input name="colors" placeholder="beige, noire" required>
-    <label>السعر بالدينار</label><input type="number" name="price" placeholder="2500" required>
     <label>الكميات حسب ترتيب الألوان</label><input name="quantities" placeholder="12, 8" required>
     <button class="btn green" type="submit">✅ حفظ المنتج</button></form></div></div>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -158,6 +165,8 @@ def edit_product(i):
     if request.method=="POST":
         p["name"]=request.form.get("name","").strip()
         p["barcode"]=request.form.get("barcode","").strip()
+        try:p["cost_price"]=float(request.form.get("cost_price","0"))
+        except:p["cost_price"]=0
         try:p["price"]=float(request.form.get("price","0"))
         except:p["price"]=0
         cs=[x.strip() for x in request.form.get("colors","").split(",") if x.strip()]
@@ -171,8 +180,9 @@ def edit_product(i):
     body="""<div class="header"><h1>✏️ تعديل المنتج</h1></div><div class="container"><div class="card"><form method="POST">
     <label>اسم المنتج</label><input name="name" value="{{ p.name }}" required>
     <label>الباركود</label><input name="barcode" value="{{ p.barcode }}" required>
+    <label>ثمن الشراء</label><input type="number" name="cost_price" value="{{ p.cost_price }}" required>
+    <label>سعر البيع</label><input type="number" name="price" value="{{ p.price }}" required>
     <label>الألوان</label><input name="colors" value="{{ p.colors.keys()|join(', ') }}" required>
-    <label>السعر</label><input type="number" name="price" value="{{ p.price }}" required>
     <label>الكميات</label><input name="quantities" value="{{ p.colors.values()|join(', ') }}" required>
     <button class="btn green">💾 حفظ التعديلات</button></form></div></div><a class="back" href="/products">← العودة</a>"""
     return page("تعديل المنتج",body,p=p)
@@ -200,8 +210,21 @@ def sales():
                 p["colors"][color] -= qty
                 inv = d["invoice_number"]
                 total = qty * p["price"]
+                total_cost = qty * p.get("cost_price", 0)
+                profit = total - total_cost
                 now = datetime.now()
-                d["sales"].append({"invoice": inv, "product": p["name"], "barcode": p["barcode"], "color": color, "quantity": qty, "price": p["price"], "total": total, "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M")})
+                d["sales"].append({
+                    "invoice": inv,
+                    "product": p["name"],
+                    "barcode": p["barcode"],
+                    "color": color,
+                    "quantity": qty,
+                    "price": p["price"],
+                    "total": total,
+                    "profit": profit,
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M")
+                })
                 d["invoice_number"] += 1
                 save_data(d)
                 return redirect(f"/invoice/{inv}")
@@ -232,7 +255,9 @@ def sales():
     </script>
     <div class="card"><h2>آخر المبيعات</h2>{% for s in sales %}<div class="product"><div class="product-name">🧾 فاتورة #{{ "%05d"|format(s.invoice) }}</div>
     <div class="info">المنتج: {{ s.product }} (باركود: {{ s.barcode }})</div><div class="info">اللون: {{ s.color }}</div><div class="info">الكمية: {{ s.quantity }}</div>
-    <div class="info">الإجمالي: {{ "%.0f"|format(s.total) }} DA</div><div class="info">{{ s.date }} — {{ s.time }}</div>
+    <div class="info">الإجمالي: {{ "%.0f"|format(s.total) }} DA</div>
+    <div class="info" style="color:#16a34a; font-weight:bold;">الربح الصافي: {{ "%.0f"|format(s.profit) }} DA</div>
+    <div class="info">{{ s.date }} — {{ s.time }}</div>
     <a class="btn" href="/invoice/{{ s.invoice }}">🧾 عرض الفاتورة</a></div>{% else %}<div class="empty">لا توجد مبيعات حتى الآن.</div>{% endfor %}</div></div><a class="back" href="/">← العودة</a>"""
     return page("المبيعات",body,sales=list(reversed(d["sales"]))[:10])
 
@@ -249,6 +274,7 @@ def invoice(n):
     <div class="invoice-line">الكمية: <strong>{{ s.quantity }}</strong></div>
     <div class="invoice-line">سعر القطعة: <strong>{{ "%.0f"|format(s.price) }} DA</strong></div>
     <div class="invoice-total">الإجمالي:<br>{{ "%.0f"|format(s.total) }} DA</div>
+    <div class="invoice-line" style="text-align:center; color:#16a34a; font-weight:bold; margin-top:10px;">الربح الصافي لهذه العملية: {{ "%.0f"|format(s.profit) }} DA</div>
     <div class="invoice-line">التاريخ: {{ s.date }}<br>الوقت: {{ s.time }}</div>
     <div style="text-align:center;margin-top:25px;font-size:18px">شكراً لزيارتكم ❤️</div>
     </div>
@@ -258,12 +284,19 @@ def invoice(n):
 @app.route("/statistics")
 def statistics():
     if not check_trial(): return redirect("/")
-    d=load_data();stock=sum(sum(p["colors"].values()) for p in d["products"]);sold=sum(s["quantity"] for s in d["sales"]);rev=sum(s["total"] for s in d["sales"])
-    body="""<div class="header"><h1>📊 الإحصائيات</h1></div><div class="container"><div class="card">
-    <div class="stat"><div class="stat-number">{{ pc }}</div>عدد المنتجات</div><div class="stat"><div class="stat-number">{{ stock }}</div>القطع الموجودة</div>
-    <div class="stat"><div class="stat-number">{{ sold }}</div>القطع المباعة</div><div class="stat"><div class="stat-number">{{ "%.0f"|format(rev) }} DA</div>إجمالي المبيعات</div>
+    d=load_data()
+    stock=sum(sum(p["colors"].values()) for p in d["products"])
+    sold=sum(s["quantity"] for s in d["sales"])
+    rev=sum(s["total"] for s in d["sales"])
+    total_profit=sum(s.get("profit",0) for s in d["sales"])
+    body="""<div class="header"><h1>📊 الإحصائيات والأرباح</h1></div><div class="container"><div class="card">
+    <div class="stat"><div class="stat-number">{{ pc }}</div>عدد المنتجات</div>
+    <div class="stat"><div class="stat-number">{{ stock }}</div>القطع الموجودة في المخزون</div>
+    <div class="stat"><div class="stat-number">{{ sold }}</div>القطع المباعة</div>
+    <div class="stat"><div class="stat-number">{{ "%.0f"|format(rev) }} DA</div>إجمالي المبيعات</div>
+    <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(total_profit) }} DA</div>إجمالي صافي الأرباح</div>
     </div></div><a class="back" href="/">← العودة للرئيسية</a>"""
-    return page("الإحصائيات",body,pc=len(d["products"]),stock=stock,sold=sold,rev=rev)
+    return page("الإحصائيات",body,pc=len(d["products"]),stock=stock,sold=sold,rev=rev,total_profit=total_profit)
 
 @app.route("/search")
 def search():
@@ -285,5 +318,6 @@ def low_stock():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
