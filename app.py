@@ -1,4 +1,3 @@
- 
 from flask import Flask, request, redirect, render_template_string
 import json, os
 from datetime import datetime, timedelta
@@ -42,7 +41,24 @@ label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{bord
 .back{display:block;text-align:center;margin:20px;color:#2563eb;text-decoration:none;font-size:18px}
 .invoice-title{text-align:center;font-size:28px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:12px 0;font-size:18px}
 .invoice-total{font-size:24px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
-@media print{body{background:#fff}.no-print{display:none!important}.invoice{box-shadow:none}}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-area, #printable-area * {
+    visibility: visible;
+  }
+  #printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
 """
 
 PAGE = """<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>{{ title }}</title><style>{{ style|safe }}</style></head><body>{{ body|safe }}</body></html>"""
@@ -215,7 +231,7 @@ def invoice(n):
     if not check_trial(): return redirect("/")
     d=load_data();s=next((x for x in d["sales"] if x.get("invoice")==n),None)
     if not s:return redirect("/sales")
-    body="""<div class="container"><div class="invoice"><div class="invoice-title">🧾 الفاتورة</div>
+    body="""<div class="container"><div id="printable-area" class="invoice"><div class="invoice-title">🧾 الفاتورة</div>
     <div class="invoice-line">رقم الفاتورة: <strong>{{ "%05d"|format(s.invoice) }}</strong></div>
     <div class="invoice-line">المنتج: <strong>{{ s.product }}</strong></div>
     <div class="invoice-line">الباركود: <strong>{{ s.barcode }}</strong></div>
@@ -225,8 +241,8 @@ def invoice(n):
     <div class="invoice-total">الإجمالي:<br>{{ "%.0f"|format(s.total) }} DA</div>
     <div class="invoice-line">التاريخ: {{ s.date }}<br>الوقت: {{ s.time }}</div>
     <div style="text-align:center;margin-top:25px;font-size:18px">شكراً لزيارتكم ❤️</div>
-    <button class="print-btn no-print" onclick="window.print()">🖨️ طباعة / حفظ الفاتورة</button><a class="btn no-print" href="/sales">← العودة للمبيعات</a>
-    </div></div>"""
+    </div>
+    <button class="print-btn no-print" onclick="window.print()">🖨️ طباعة / حفظ الفاتورة</button><a class="btn no-print" href="/sales">← العودة للمبيعات</a></div>"""
     return page("الفاتورة",body,s=s)
 
 @app.route("/statistics")
@@ -259,3 +275,4 @@ def low_stock():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
