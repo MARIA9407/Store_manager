@@ -40,6 +40,7 @@ label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{bord
 .back{display:block;text-align:center;margin:20px;color:#2563eb;text-decoration:none;font-size:18px}
 .invoice-title{text-align:center;font-size:26px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:10px 0;font-size:17px}
 .invoice-total{font-size:22px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
+.stat-row {display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; direction: rtl;}
 
 @media print {
   body * { visibility: hidden; }
@@ -353,7 +354,7 @@ def statistics():
         <h2>🔥 أكثر المنتجات مبيعاً</h2>
         {% if top_products %}
             {% for name, q in top_products %}
-                <div class="info" style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
+                <div class="stat-row">
                     <span>📦 <strong>{{ name }}</strong></span>
                     <span style="color:#2563eb; font-weight:bold;">{{ q }} قطعة مباعة</span>
                 </div>
@@ -367,7 +368,7 @@ def statistics():
         <h2>❄️ أقل المنتجات مبيعاً (الراكدة)</h2>
         {% if low_products %}
             {% for name, q in low_products %}
-                <div class="info" style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
+                <div class="stat-row">
                     <span>📦 <strong>{{ name }}</strong></span>
                     <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة فقط</span>
                 </div>
@@ -401,6 +402,8 @@ def low_stock():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
+
 
 
 
