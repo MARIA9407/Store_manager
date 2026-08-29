@@ -40,7 +40,6 @@ label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{bord
 .back{display:block;text-align:center;margin:20px;color:#2563eb;text-decoration:none;font-size:18px}
 .invoice-title{text-align:center;font-size:26px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:10px 0;font-size:17px}
 .invoice-total{font-size:22px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
-.report-section{margin-top:15px;padding-top:15px;border-top:1px solid #eee}
 
 @media print {
   body * { visibility: hidden; }
@@ -130,7 +129,7 @@ def add_product():
         return redirect("/products")
     body="""<div class="header"><h1>➕ إضافة منتج جديد</h1></div>
     <div class="container"><div class="card">
-    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 فتح الكاميرا لمسح الباركود (اختياري)</button></div>
+    <div style="margin-bottom:15px;"><button type="button" class="btn" onclick="startScanner('barcode')">📷 مسح باركود بالكاميرا (اختياري)</button></div>
     <div id="reader" style="width:100%; display:none; margin-bottom:15px;"></div>
     <form method="POST">
     <label>اسم المنتج</label><input name="name" placeholder="مثال: قندورة صيفية" required>
@@ -205,7 +204,6 @@ def sales():
         try: qty=int(request.form["quantity"])
         except: qty=0
         
-        # البحث بالباركود أو بالاسم المباشر إن لم يكن هناك باركود
         p = next((prod for prod in d["products"] if (prod.get("barcode","") and prod.get("barcode","").lower() == barcode_input.lower()) or prod.get("name","").lower() == barcode_input.lower()), None)
         
         if p and qty > 0:
@@ -292,9 +290,7 @@ def statistics():
     today_str = datetime.now().strftime("%Y-%m-%d")
     now_dt = datetime.now()
     
-    # حساب فترات الزمن
     day_sales = [s for s in d["sales"] if s.get("date") == today_str]
-    
     week_ago = now_dt - timedelta(days=7)
     month_ago = now_dt - timedelta(days=30)
     
@@ -311,17 +307,13 @@ def statistics():
         except:
             pass
 
-    # مجاميع الفترات
     d_rev = sum(s.get("total", 0) for s in day_sales)
     d_prof = sum(s.get("profit", 0) for s in day_sales)
-    
     w_rev = sum(s.get("total", 0) for s in week_sales)
     w_prof = sum(s.get("profit", 0) for s in week_sales)
-    
     m_rev = sum(s.get("total", 0) for s in month_sales)
     m_prof = sum(s.get("profit", 0) for s in month_sales)
 
-    # تحليل أكثر وأقل المنتجات مبيعاً
     product_stats = {}
     for s in d["sales"]:
         p_name = s.get("product", "غير معروف")
@@ -330,19 +322,17 @@ def statistics():
         
     sorted_products = sorted(product_stats.items(), key=lambda x: x[1], reverse=True)
     top_products = sorted_products[:5]
-    low_products = sorted_products[-5:] if len(sorted_products) >= 5 else sorted_products
+    low_products = sorted(product_stats.items(), key=lambda x: x[1])[:5]
 
     body="""<div class="header"><h1>📊 التقارير والإحصائيات الشاملة</h1></div>
     <div class="container">
     
-    <!-- مبيعات اليوم -->
     <div class="card">
         <h2>📅 مبيعات اليوم</h2>
         <div class="stat"><div class="stat-number">{{ "%.0f"|format(d_rev) }} DA</div>إيرادات اليوم</div>
         <div class="stat" style="background:#dcfce7; color:#166534;"><div class="stat-number">{{ "%.0f"|format(d_prof) }} DA</div>صافي ربح اليوم</div>
     </div>
 
-    <!-- مبيعات الأسبوع والشهر -->
     <div class="card">
         <h2>📈 مبيعات الأسبوع والشهر</h2>
         <div class="grid">
@@ -359,12 +349,11 @@ def statistics():
         </div>
     </div>
 
-    <!-- أكثر المنتجات مبيعاً -->
     <div class="card">
         <h2>🔥 أكثر المنتجات مبيعاً</h2>
         {% if top_products %}
             {% for name, q in top_products %}
-                <div class="info" style="display:flex; justify-content:between; padding:8px 0; border-bottom:1px solid #eee;">
+                <div class="info" style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
                     <span>📦 <strong>{{ name }}</strong></span>
                     <span style="color:#2563eb; font-weight:bold;">{{ q }} قطعة مباعة</span>
                 </div>
@@ -374,12 +363,11 @@ def statistics():
         {% endif %}
     </div>
 
-    <!-- أقل المنتجات مبيعاً -->
     <div class="card">
         <h2>❄️ أقل المنتجات مبيعاً (الراكدة)</h2>
         {% if low_products %}
             {% for name, q in low_products %}
-                <div class="info" style="display:flex; justify-content:between; padding:8px 0; border-bottom:1px solid #eee;">
+                <div class="info" style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
                     <span>📦 <strong>{{ name }}</strong></span>
                     <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة فقط</span>
                 </div>
@@ -413,6 +401,7 @@ def low_stock():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
