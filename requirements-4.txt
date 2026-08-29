@@ -1,2 +1,4 @@
 Flask
+itsdangerous
+psycopg2-binary
 gunicorn
