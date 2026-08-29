@@ -1,113 +1,469 @@
-from flask import Flask, request, redirect, render_template_string, make_response
+from flask import Flask, request, redirect, render_template_string, g
 import json
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from itsdangerous import URLSafeSerializer, BadSignature
 
-app = Flask(__name__)
+# PostgreSQL
+import psycopg2
+from psycopg2.extras import Json
+
 
 # =========================================================
-# إعدادات التطبيق
+# APP
 # =========================================================
+
+app = Flask(__name__)
 
 app.config["SECRET_KEY"] = os.environ.get(
     "SECRET_KEY",
     "store-manager-demo-secret-2026"
 )
 
+
+# =========================================================
+# الإعدادات
+# =========================================================
+
 TRIAL_DAYS = 3
 
-# اسم الكوكي التي تحفظ وقت أول دخول
-TRIAL_COOKIE = "store_manager_trial"
+# توقيت الجزائر
+ALGERIA_TZ = ZoneInfo("Africa/Algiers")
 
-# توقيع الكوكي لمنع تعديلها بسهولة
+# Cookie جديدة حتى لا نستخدم وقت الكوكي القديمة
+TRIAL_COOKIE = "store_manager_trial_v3"
+
 TRIAL_SIGNER = URLSafeSerializer(
     app.config["SECRET_KEY"],
-    salt="store-manager-trial-v2"
+    salt="store-manager-trial-v3"
 )
 
+# قاعدة البيانات
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# ملف احتياطي محلي
 DATA_FILE = "store_data.json"
 
 
 # =========================================================
-# البيانات
+# الوقت
 # =========================================================
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {
-            "products": [],
-            "sales": [],
-            "invoice_number": 1
-        }
+def algeria_now():
+    """
+    إرجاع الوقت الحالي بتوقيت الجزائر.
+    """
+
+    return datetime.now(ALGERIA_TZ)
+
+
+# =========================================================
+# البيانات الافتراضية
+# =========================================================
+
+def empty_data():
+    return {
+        "products": [],
+        "sales": [],
+        "invoice_number": 1
+    }
+
+
+# =========================================================
+# الاتصال بقاعدة البيانات
+# =========================================================
+
+def get_db_connection():
+
+    if not DATABASE_URL:
+        return None
+
+    return psycopg2.connect(
+        DATABASE_URL
+    )
+
+
+# =========================================================
+# إنشاء جدول البيانات
+# =========================================================
+
+def init_database():
+
+    if not DATABASE_URL:
+        return
+
+    conn = None
 
     try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
+
+        conn = get_db_connection()
+
+        cur = conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS store_data (
+                id INTEGER PRIMARY KEY,
+                data JSONB NOT NULL
+            )
+        """)
+
+        conn.commit()
+
+        cur.close()
+
+    except Exception as e:
+
+        print("DATABASE INIT ERROR:", e)
+
+        if conn:
+            conn.rollback()
+
+    finally:
+
+        if conn:
+            conn.close()
+
+
+# =========================================================
+# تحميل البيانات من الملف القديم
+# =========================================================
+
+def load_old_file():
+
+    if not os.path.exists(DATA_FILE):
+        return empty_data()
+
+    try:
+
+        with open(
+            DATA_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             d = json.load(f)
 
-        d.setdefault("products", [])
-        d.setdefault("sales", [])
-        d.setdefault("invoice_number", 1)
+        d.setdefault(
+            "products",
+            []
+        )
+
+        d.setdefault(
+            "sales",
+            []
+        )
+
+        d.setdefault(
+            "invoice_number",
+            1
+        )
 
         return d
 
     except Exception:
-        return {
-            "products": [],
-            "sales": [],
-            "invoice_number": 1
-        }
 
+        return empty_data()
+
+
+# =========================================================
+# تحميل البيانات
+# =========================================================
+
+def load_data():
+
+    # -----------------------------------------------------
+    # إذا كانت PostgreSQL موجودة
+    # -----------------------------------------------------
+
+    if DATABASE_URL:
+
+        conn = None
+
+        try:
+
+            conn = get_db_connection()
+
+            cur = conn.cursor()
+
+            cur.execute("""
+                SELECT data
+                FROM store_data
+                WHERE id = 1
+            """)
+
+            row = cur.fetchone()
+
+            cur.close()
+
+            # توجد بيانات في قاعدة البيانات
+            if row:
+
+                d = row[0]
+
+                d.setdefault(
+                    "products",
+                    []
+                )
+
+                d.setdefault(
+                    "sales",
+                    []
+                )
+
+                d.setdefault(
+                    "invoice_number",
+                    1
+                )
+
+                return d
+
+            # -------------------------------------------------
+            # لا توجد بيانات في DB
+            # نحاول نقل البيانات القديمة
+            # -------------------------------------------------
+
+            old_data = load_old_file()
+
+            save_data(old_data)
+
+            return old_data
+
+        except Exception as e:
+
+            print(
+                "DATABASE LOAD ERROR:",
+                e
+            )
+
+            # إذا فشلت قاعدة البيانات
+            # نستخدم الملف كاحتياط
+            return load_old_file()
+
+        finally:
+
+            if conn:
+                conn.close()
+
+
+    # -----------------------------------------------------
+    # بدون PostgreSQL
+    # -----------------------------------------------------
+
+    return load_old_file()
+
+
+# =========================================================
+# حفظ البيانات
+# =========================================================
 
 def save_data(d):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            d,
-            f,
-            ensure_ascii=False,
-            indent=2
+
+    # -----------------------------------------------------
+    # PostgreSQL
+    # -----------------------------------------------------
+
+    if DATABASE_URL:
+
+        conn = None
+
+        try:
+
+            conn = get_db_connection()
+
+            cur = conn.cursor()
+
+            cur.execute("""
+                INSERT INTO store_data (id, data)
+                VALUES (1, %s)
+                ON CONFLICT (id)
+                DO UPDATE SET data = EXCLUDED.data
+            """, (
+                Json(d),
+            ))
+
+            conn.commit()
+
+            cur.close()
+
+            return
+
+        except Exception as e:
+
+            print(
+                "DATABASE SAVE ERROR:",
+                e
+            )
+
+            if conn:
+                conn.rollback()
+
+        finally:
+
+            if conn:
+                conn.close()
+
+
+    # -----------------------------------------------------
+    # ملف احتياطي
+    # -----------------------------------------------------
+
+    try:
+
+        with open(
+            DATA_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                d,
+                f,
+                ensure_ascii=False,
+                indent=2
+            )
+
+    except Exception as e:
+
+        print(
+            "FILE SAVE ERROR:",
+            e
         )
 
 
 # =========================================================
-# نظام التجربة المجانية
+# نظام التجربة
 # =========================================================
 
 def get_trial_start():
-    """
-    إرجاع وقت أول دخول محفوظ في الكوكي.
-    إذا كانت الكوكي موجودة، لا يتم إنشاء وقت جديد.
-    """
 
-    raw = request.cookies.get(TRIAL_COOKIE)
+    # إذا كان أول طلب بدون Cookie
+    # نستخدم الوقت الذي تم تحديده لهذا الطلب
+    if hasattr(g, "trial_start"):
+
+        return g.trial_start
+
+    raw = request.cookies.get(
+        TRIAL_COOKIE
+    )
 
     if not raw:
+
         return None
 
     try:
-        value = TRIAL_SIGNER.loads(raw)
 
-        start = datetime.fromisoformat(value)
+        value = TRIAL_SIGNER.loads(
+            raw
+        )
 
-        return start
+        return datetime.fromisoformat(
+            value
+        )
 
-    except (BadSignature, ValueError, TypeError):
+    except (
+        BadSignature,
+        ValueError,
+        TypeError
+    ):
+
         return None
 
 
-def create_trial_cookie(response):
-    """
-    إنشاء وقت البداية مرة واحدة فقط.
-    """
+# =========================================================
+# تحديد بداية التجربة عند أول دخول
+# =========================================================
 
-    # إذا كانت الكوكي موجودة، لا نعيد إنشاء التجربة
-    if request.cookies.get(TRIAL_COOKIE):
+@app.before_request
+def prepare_trial():
+
+    # إذا لم توجد Cookie
+    # فهذا أول دخول لهذا المتصفح
+
+    if not request.cookies.get(
+        TRIAL_COOKIE
+    ):
+
+        # نسجل الوقت مرة واحدة فقط
+        # بتوقيت الجزائر
+
+        g.trial_start = algeria_now()
+
+
+# =========================================================
+# حالة التجربة
+# =========================================================
+
+def trial_status():
+
+    start = get_trial_start()
+
+    # أول دخول
+    if start is None:
+
+        start = algeria_now()
+
+    # نهاية التجربة
+    end = start + timedelta(
+        days=TRIAL_DAYS
+    )
+
+    now = algeria_now()
+
+    remaining = end - now
+
+    seconds = int(
+        remaining.total_seconds()
+    )
+
+    # انتهت التجربة
+    if seconds <= 0:
+
+        return (
+            False,
+            0,
+            start,
+            end
+        )
+
+    # الأيام المتبقية
+    days = (
+        seconds + 86399
+    ) // 86400
+
+    return (
+        True,
+        days,
+        start,
+        end
+    )
+
+
+# =========================================================
+# حفظ Cookie الخاصة بوقت البداية
+# =========================================================
+
+@app.after_request
+def save_trial_cookie(response):
+
+    # إذا كانت موجودة بالفعل
+    # لا نغيرها أبداً
+
+    if request.cookies.get(
+        TRIAL_COOKIE
+    ):
+
         return response
 
-    # وقت أول دخول الحقيقي
-    start = datetime.now()
+    # وقت أول دخول
+    start = getattr(
+        g,
+        "trial_start",
+        algeria_now()
+    )
 
-    # حفظ وقت البداية داخل كوكي موقعة
+    # توقيع الوقت
     signed_start = TRIAL_SIGNER.dumps(
         start.isoformat()
     )
@@ -116,14 +472,13 @@ def create_trial_cookie(response):
         TRIAL_COOKIE,
         signed_start,
 
-        # تبقى الكوكي لمدة 30 يومًا
-        # بينما مدة التجربة نفسها 3 أيام
+        # مدة بقاء Cookie
         max_age=60 * 60 * 24 * 30,
 
         httponly=True,
+
         samesite="Lax",
 
-        # الموقع يعمل على HTTPS في Render
         secure=request.is_secure,
 
         path="/"
@@ -132,73 +487,82 @@ def create_trial_cookie(response):
     return response
 
 
-def trial_status():
-    """
-    حساب حالة التجربة اعتمادًا على وقت البداية الثابت.
-    """
+# =========================================================
+# حماية التجربة
+# =========================================================
 
-    start = get_trial_start()
+@app.before_request
+def enforce_trial():
 
-    # لم يبدأ العميل التجربة بعد
-    if start is None:
-        return True, TRIAL_DAYS, None
+    # لا نمنع الملفات الثابتة
+    if request.path.startswith(
+        "/static/"
+    ):
+        return None
 
-    # وقت انتهاء التجربة
-    end = start + timedelta(days=TRIAL_DAYS)
+    active, days, start, end = trial_status()
 
-    # الوقت المتبقي
-    remaining = end - datetime.now()
+    if not active:
 
-    seconds = int(
-        remaining.total_seconds()
-    )
+        return trial_expired_response()
 
-    # انتهت التجربة
-    if seconds <= 0:
-        return False, 0, end
-
-    # عدد الأيام المتبقية
-    days = (seconds + 86399) // 86400
-
-    return True, days, end
-
-
-def trial_guard():
-    active, days, end = trial_status()
-
-    return active, days, end
+    return None
 
 
 # =========================================================
-# صفحة انتهاء التجربة
+# انتهاء التجربة
 # =========================================================
 
 def trial_expired_response():
 
     body = """
+
     <div class="header">
-        <h1>🛍️ إدارة المتجر</h1>
-        <p>نظام إدارة المنتجات والمبيعات</p>
+
+        <h1>
+            🛍️ لوحة تحكم المتجر
+        </h1>
+
+        <p>
+            نظام إدارة المبيعات والأرباح
+        </p>
+
     </div>
+
 
     <div class="container">
 
-        <div class="card" style="text-align:center">
+        <div class="card"
+             style="text-align:center">
 
-            <h2>⏰ انتهت النسخة التجريبية</h2>
+            <h2>
+                ⏰ انتهت النسخة التجريبية
+            </h2>
 
-            <p style="font-size:19px;line-height:1.8">
-                انتهت مدة التجربة المجانية لمدة 3 أيام.
+            <p
+                style="
+                font-size:19px;
+                line-height:1.8
+                "
+            >
+
+                انتهت مدة التجربة المجانية
+                لمدة 3 أيام.
+
             </p>
 
+
             <div class="warning">
+
                 🔓 للحصول على النسخة الكاملة،
                 تواصلي مع صاحبة التطبيق.
+
             </div>
 
         </div>
 
     </div>
+
     """
 
     return page(
@@ -208,47 +572,15 @@ def trial_expired_response():
 
 
 # =========================================================
-# منع الدخول بعد انتهاء التجربة
-# =========================================================
-
-@app.before_request
-def enforce_trial():
-
-    # السماح بالملفات الثابتة إن وجدت
-    if request.path.startswith("/static/"):
-        return None
-
-    active, days, end = trial_status()
-
-    if not active:
-        return trial_expired_response()
-
-    return None
-
-
-# =========================================================
-# إنشاء الكوكي بعد أول استجابة
-# =========================================================
-
-@app.after_request
-def set_trial_cookie(response):
-
-    # إذا لم توجد كوكي، فهذا أول دخول
-    if not request.cookies.get(TRIAL_COOKIE):
-
-        response = create_trial_cookie(response)
-
-    return response
-
-
-# =========================================================
 # التصميم
 # =========================================================
 
 STYLE = """
+
 *{
     box-sizing:border-box;
 }
+
 
 body{
     margin:0;
@@ -257,6 +589,7 @@ body{
     color:#222;
 }
 
+
 .header{
     background:#1f2937;
     color:#fff;
@@ -264,20 +597,24 @@ body{
     text-align:center;
 }
 
+
 .header h1{
     margin:0;
     font-size:30px;
 }
 
+
 .header p{
     font-size:19px;
 }
+
 
 .container{
     width:94%;
     max-width:700px;
     margin:20px auto;
 }
+
 
 .card,
 .invoice{
@@ -288,11 +625,13 @@ body{
     box-shadow:0 4px 12px #0001;
 }
 
+
 .grid{
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:12px;
 }
+
 
 .btn{
     display:block;
@@ -309,21 +648,26 @@ body{
     cursor:pointer;
 }
 
+
 .green{
     background:#16a34a;
 }
+
 
 .red{
     background:#dc2626;
 }
 
+
 .orange{
     background:#ea580c;
 }
 
+
 .gray{
     background:#4b5563;
 }
+
 
 input,
 select{
@@ -336,12 +680,14 @@ select{
     background:#fff;
 }
 
+
 label{
     display:block;
     font-size:17px;
     font-weight:bold;
     margin-top:8px;
 }
+
 
 .product{
     border:1px solid #ddd;
@@ -350,25 +696,30 @@ label{
     margin-top:13px;
 }
 
+
 .product-name{
     font-size:23px;
     font-weight:bold;
     margin-bottom:8px;
 }
 
+
 .info{
     font-size:17px;
     margin-top:8px;
 }
+
 
 .actions{
     display:flex;
     gap:8px;
 }
 
+
 .actions a{
     flex:1;
 }
+
 
 .stat{
     text-align:center;
@@ -378,10 +729,12 @@ label{
     margin-bottom:12px;
 }
 
+
 .stat-number{
     font-size:27px;
     font-weight:bold;
 }
+
 
 .empty{
     text-align:center;
@@ -389,6 +742,7 @@ label{
     color:#777;
     font-size:18px;
 }
+
 
 .warning{
     background:#fff7ed;
@@ -398,6 +752,7 @@ label{
     margin-top:10px;
 }
 
+
 .trial-box{
     text-align:center;
     background:#eef2ff;
@@ -405,11 +760,19 @@ label{
     color:#1e40af;
 }
 
-.trial-time{
-    font-size:24px;
+
+.trial-title{
+    font-size:25px;
     font-weight:bold;
-    margin-top:8px;
 }
+
+
+.trial-time{
+    font-size:25px;
+    font-weight:bold;
+    margin-top:10px;
+}
+
 
 .back{
     display:block;
@@ -420,6 +783,7 @@ label{
     font-size:18px;
 }
 
+
 .invoice-title{
     text-align:center;
     font-size:28px;
@@ -427,11 +791,13 @@ label{
     margin-bottom:20px;
 }
 
+
 .invoice-line{
     border-bottom:1px dashed #aaa;
     padding:12px 0;
     font-size:18px;
 }
+
 
 .invoice-total{
     font-size:24px;
@@ -439,6 +805,7 @@ label{
     text-align:center;
     margin-top:20px;
 }
+
 
 .print-btn{
     background:#111827;
@@ -451,7 +818,9 @@ label{
     margin-top:20px;
 }
 
+
 @media print{
+
     body{
         background:#fff;
     }
@@ -463,16 +832,20 @@ label{
     .invoice{
         box-shadow:none;
     }
+
 }
+
 """
 
 
 # =========================================================
-# الصفحة الأساسية
+# قالب الصفحة
 # =========================================================
 
 PAGE = """
+
 <!DOCTYPE html>
+
 <html lang="ar" dir="rtl">
 
 <head>
@@ -484,13 +857,18 @@ name="viewport"
 content="width=device-width,initial-scale=1.0"
 >
 
-<title>{{ title }}</title>
+<title>
+{{ title }}
+</title>
 
 <style>
+
 {{ style|safe }}
+
 </style>
 
 </head>
+
 
 <body>
 
@@ -499,10 +877,15 @@ content="width=device-width,initial-scale=1.0"
 </body>
 
 </html>
+
 """
 
 
-def page(title, body, **ctx):
+def page(
+    title,
+    body,
+    **ctx
+):
 
     return render_template_string(
         PAGE,
@@ -516,7 +899,7 @@ def page(title, body, **ctx):
 
 
 # =========================================================
-# الصفحة الرئيسية
+# الرئيسية
 # =========================================================
 
 @app.route("/")
@@ -525,37 +908,42 @@ def home():
     d = load_data()
 
     stock = sum(
-        sum(p["colors"].values())
+        sum(
+            p["colors"].values()
+        )
         for p in d["products"]
     )
 
     revenue = sum(
-        s.get("total", 0)
+        s.get(
+            "total",
+            0
+        )
         for s in d["sales"]
     )
 
-    active, trial_days, trial_end = trial_guard()
+    active, trial_days, start, end = trial_status()
 
     if not active:
+
         return trial_expired_response()
 
-    # إذا كانت هذه أول زيارة،
-    # trial_end لن يكون موجودًا بعد.
-    # نعرض رسالة مناسبة.
-    if trial_end is None:
+    start_text = start.strftime(
+        "%d-%m-%Y %H:%M"
+    )
 
-        trial_text = "ستبدأ التجربة من أول دخول"
+    end_text = end.strftime(
+        "%d-%m-%Y %H:%M"
+    )
 
-    else:
-
-        trial_text = trial_end.strftime(
-            "%d-%m-%Y %H:%M"
-        )
 
     body = """
+
     <div class="header">
 
-        <h1>🛍️ لوحة تحكم المتجر</h1>
+        <h1>
+            🛍️ لوحة تحكم المتجر
+        </h1>
 
         <p>
             نظام إدارة المبيعات والأرباح المتقدم
@@ -568,39 +956,64 @@ def home():
 
         <div class="card trial-box">
 
-            <strong style="font-size:21px">
-                ⏳ التجربة المجانية
-            </strong>
+            <div class="trial-title">
 
-            <div style="margin-top:8px">
-                مدة التجربة: 3 أيام
+                ⏳ التجربة المجانية
+
             </div>
 
-            {% if trial_end %}
 
-                <div style="margin-top:10px">
-                    تنتهي في:
-                </div>
+            <div style="margin-top:12px">
 
-                <div class="trial-time">
-                    {{ trial_text }}
-                </div>
+                مدة التجربة:
+                <strong>
+                    3 أيام
+                </strong>
 
-                <div style="margin-top:10px">
-                    {% if trial_days == 1 %}
-                        متبقي أقل من يوم
-                    {% else %}
-                        متبقي {{ trial_days }} أيام
-                    {% endif %}
-                </div>
+            </div>
 
-            {% else %}
 
-                <div style="margin-top:10px">
-                    ستبدأ التجربة من أول دخول
-                </div>
+            <div style="margin-top:12px">
 
-            {% endif %}
+                بدأت في:
+
+            </div>
+
+
+            <div class="trial-time">
+
+                {{ start_text }}
+
+            </div>
+
+
+            <div style="margin-top:12px">
+
+                تنتهي في:
+
+            </div>
+
+
+            <div class="trial-time">
+
+                {{ end_text }}
+
+            </div>
+
+
+            <div style="margin-top:12px">
+
+                {% if trial_days == 1 %}
+
+                    متبقي أقل من يوم
+
+                {% else %}
+
+                    متبقي {{ trial_days }} أيام
+
+                {% endif %}
+
+            </div>
 
         </div>
 
@@ -615,40 +1028,58 @@ def home():
                 الرئيسية والعمليات
             </h2>
 
+
             <div class="grid">
 
-                <a class="btn"
-                   href="/products">
+                <a
+                    class="btn"
+                    href="/products"
+                >
                     📦<br>
                     المنتجات
                 </a>
 
-                <a class="btn green"
-                   href="/sales">
+
+                <a
+                    class="btn green"
+                    href="/sales"
+                >
                     🛒<br>
                     المبيعات
                 </a>
 
-                <a class="btn"
-                   href="/statistics">
+
+                <a
+                    class="btn"
+                    href="/statistics"
+                >
                     📊<br>
                     التقارير والأرباح
                 </a>
 
-                <a class="btn"
-                   href="/search">
+
+                <a
+                    class="btn"
+                    href="/search"
+                >
                     🔎<br>
                     البحث
                 </a>
 
-                <a class="btn red"
-                   href="/low-stock">
+
+                <a
+                    class="btn red"
+                    href="/low-stock"
+                >
                     ⚠️<br>
                     المخزون المنخفض
                 </a>
 
-                <a class="btn gray"
-                   href="/add-product">
+
+                <a
+                    class="btn gray"
+                    href="/add-product"
+                >
                     ➕<br>
                     إضافة منتج
                 </a>
@@ -663,6 +1094,7 @@ def home():
             <h2>
                 📊 ملخص المتجر
             </h2>
+
 
             <div class="stat">
 
@@ -689,7 +1121,10 @@ def home():
             <div class="stat">
 
                 <div class="stat-number">
-                    {{ "%.0f"|format(revenue) }} DA
+
+                    {{ "%.0f"|format(revenue) }}
+                    DA
+
                 </div>
 
                 إجمالي المبيعات
@@ -699,17 +1134,26 @@ def home():
         </div>
 
     </div>
+
     """
 
     return page(
         "إدارة المتجر",
         body,
-        pc=len(d["products"]),
+
+        pc=len(
+            d["products"]
+        ),
+
         stock=stock,
+
         revenue=revenue,
+
         trial_days=trial_days,
-        trial_end=trial_end,
-        trial_text=trial_text
+
+        start_text=start_text,
+
+        end_text=end_text
     )
 
 
@@ -725,15 +1169,22 @@ def products():
     body = """
 
     <div class="header">
-        <h1>📦 المنتجات</h1>
+
+        <h1>
+            📦 المنتجات
+        </h1>
+
     </div>
+
 
     <div class="container">
 
         <div class="card">
 
-            <a class="btn green"
-               href="/add-product">
+            <a
+                class="btn green"
+                href="/add-product"
+            >
                 ➕ إضافة منتج جديد
             </a>
 
@@ -749,24 +1200,37 @@ def products():
                 <div class="product">
 
                     <div class="product-name">
+
                         {{ p.name }}
+
                     </div>
 
+
                     <div class="info">
+
                         💰 السعر:
+
                         {{ "%.0f"|format(p.price) }}
+
                         DA
+
                     </div>
 
+
                     <div class="info">
+
                         📦 المخزون:
+
                     </div>
+
 
                     {% for c,q in p.colors.items() %}
 
                         <div class="info">
+
                             • {{ c }} :
                             {{ q }} قطعة
+
                         </div>
 
                     {% endfor %}
@@ -774,14 +1238,19 @@ def products():
 
                     <div class="actions">
 
-                        <a class="btn orange"
-                           href="/edit-product/{{ loop.index0 }}">
+                        <a
+                            class="btn orange"
+                            href="/edit-product/{{ loop.index0 }}"
+                        >
                             ✏️ تعديل
                         </a>
 
-                        <a class="btn red"
-                           href="/delete-product/{{ loop.index0 }}"
-                           onclick="return confirm('هل أنت متأكد من حذف هذا المنتج؟')">
+
+                        <a
+                            class="btn red"
+                            href="/delete-product/{{ loop.index0 }}"
+                            onclick="return confirm('هل أنت متأكد من حذف هذا المنتج؟')"
+                        >
                             🗑️ حذف
                         </a>
 
@@ -794,7 +1263,9 @@ def products():
         {% else %}
 
             <div class="empty">
+
                 لا توجد منتجات حتى الآن.
+
             </div>
 
         {% endif %}
@@ -803,7 +1274,11 @@ def products():
 
     </div>
 
-    <a class="back" href="/">
+
+    <a
+        class="back"
+        href="/"
+    >
         ← العودة للرئيسية
     </a>
 
@@ -835,22 +1310,32 @@ def add_product():
             ""
         ).strip()
 
+
         colors = [
+
             x.strip()
+
             for x in request.form.get(
                 "colors",
                 ""
             ).split(",")
+
             if x.strip()
+
         ]
 
+
         qs = [
+
             x.strip()
+
             for x in request.form.get(
                 "quantities",
                 ""
             ).split(",")
+
         ]
+
 
         try:
 
@@ -859,8 +1344,14 @@ def add_product():
                     "price",
                     ""
                 )
-                .replace("DA", "")
-                .replace("da", "")
+                .replace(
+                    "DA",
+                    ""
+                )
+                .replace(
+                    "da",
+                    ""
+                )
                 .strip()
             )
 
@@ -868,36 +1359,57 @@ def add_product():
 
             price = 0
 
+
         stock = {}
+
 
         for i, c in enumerate(colors):
 
             try:
+
                 q = int(qs[i])
 
             except:
+
                 q = 0
 
             stock[c] = q
 
-        if name and colors and price > 0:
+
+        if (
+            name
+            and colors
+            and price > 0
+        ):
 
             d["products"].append({
+
                 "name": name,
+
                 "colors": stock,
+
                 "price": price
+
             })
 
             save_data(d)
 
-        return redirect("/products")
+
+        return redirect(
+            "/products"
+        )
 
 
     body = """
 
     <div class="header">
-        <h1>➕ إضافة منتج</h1>
+
+        <h1>
+            ➕ إضافة منتج
+        </h1>
+
     </div>
+
 
     <div class="container">
 
@@ -963,8 +1475,11 @@ def add_product():
 
     </div>
 
-    <a class="back"
-       href="/products">
+
+    <a
+        class="back"
+        href="/products"
+    >
         ← العودة للمنتجات
     </a>
 
@@ -988,11 +1503,17 @@ def edit_product(i):
 
     d = load_data()
 
-    if not 0 <= i < len(d["products"]):
+    if not 0 <= i < len(
+        d["products"]
+    ):
 
-        return redirect("/products")
+        return redirect(
+            "/products"
+        )
+
 
     p = d["products"][i]
+
 
     if request.method == "POST":
 
@@ -1000,6 +1521,7 @@ def edit_product(i):
             "name",
             ""
         ).strip()
+
 
         try:
 
@@ -1014,45 +1536,68 @@ def edit_product(i):
 
             p["price"] = 0
 
+
         cs = [
+
             x.strip()
+
             for x in request.form.get(
                 "colors",
                 ""
             ).split(",")
+
             if x.strip()
+
         ]
 
+
         qs = [
+
             x.strip()
+
             for x in request.form.get(
                 "quantities",
                 ""
             ).split(",")
+
         ]
 
+
         p["colors"] = {}
+
 
         for j, c in enumerate(cs):
 
             try:
-                q = int(qs[j])
+
+                q = int(
+                    qs[j]
+                )
 
             except:
+
                 q = 0
 
             p["colors"][c] = q
 
+
         save_data(d)
 
-        return redirect("/products")
+        return redirect(
+            "/products"
+        )
 
 
     body = """
 
     <div class="header">
-        <h1>✏️ تعديل المنتج</h1>
+
+        <h1>
+            ✏️ تعديل المنتج
+        </h1>
+
     </div>
+
 
     <div class="container">
 
@@ -1106,7 +1651,9 @@ def edit_product(i):
 
 
                 <button class="btn green">
+
                     💾 حفظ التعديلات
+
                 </button>
 
             </form>
@@ -1115,8 +1662,11 @@ def edit_product(i):
 
     </div>
 
-    <a class="back"
-       href="/products">
+
+    <a
+        class="back"
+        href="/products"
+    >
         ← العودة
     </a>
 
@@ -1133,18 +1683,25 @@ def edit_product(i):
 # حذف منتج
 # =========================================================
 
-@app.route("/delete-product/<int:i>")
+@app.route(
+    "/delete-product/<int:i>"
+)
 def delete_product(i):
 
     d = load_data()
 
-    if 0 <= i < len(d["products"]):
+    if 0 <= i < len(
+        d["products"]
+    ):
 
         del d["products"][i]
 
         save_data(d)
 
-    return redirect("/products")
+
+    return redirect(
+        "/products"
+    )
 
 
 # =========================================================
@@ -1159,16 +1716,21 @@ def sales():
 
     d = load_data()
 
+
     if request.method == "POST":
 
         try:
 
             pi = int(
-                request.form["product"]
+                request.form[
+                    "product"
+                ]
             )
 
             qty = int(
-                request.form["quantity"]
+                request.form[
+                    "quantity"
+                ]
             )
 
             color_input = request.form[
@@ -1177,24 +1739,36 @@ def sales():
 
         except:
 
-            return redirect("/sales")
+            return redirect(
+                "/sales"
+            )
 
 
         if (
-            0 <= pi < len(d["products"])
+            0 <= pi < len(
+                d["products"]
+            )
             and qty > 0
         ):
 
             p = d["products"][pi]
 
+
             color = next(
+
                 (
                     c
-                    for c in p["colors"]
+
+                    for c
+                    in p["colors"]
+
                     if c.lower()
                     == color_input.lower()
+
                 ),
+
                 None
+
             )
 
 
@@ -1204,17 +1778,32 @@ def sales():
             ):
 
                 # إنقاص المخزون
+
                 p["colors"][color] -= qty
 
+
                 # رقم الفاتورة
-                inv = d["invoice_number"]
+
+                inv = d[
+                    "invoice_number"
+                ]
+
 
                 # حساب المجموع
-                total = qty * p["price"]
 
-                now = datetime.now()
+                total = (
+                    qty
+                    * p["price"]
+                )
+
+
+                # توقيت الجزائر
+
+                now = algeria_now()
+
 
                 # تسجيل البيع
+
                 d["sales"].append({
 
                     "invoice": inv,
@@ -1236,25 +1825,38 @@ def sales():
                     "time": now.strftime(
                         "%H:%M"
                     )
+
                 })
 
 
-                d["invoice_number"] += 1
+                d[
+                    "invoice_number"
+                ] += 1
+
+
+                # حفظ كل شيء
 
                 save_data(d)
+
 
                 return redirect(
                     f"/invoice/{inv}"
                 )
 
 
-        return redirect("/sales")
+        return redirect(
+            "/sales"
+        )
 
 
     body = """
 
     <div class="header">
-        <h1>🛒 المبيعات</h1>
+
+        <h1>
+            🛒 المبيعات
+        </h1>
+
     </div>
 
 
@@ -1266,6 +1868,7 @@ def sales():
                 تسجيل عملية بيع
             </h2>
 
+
             {% if products %}
 
             <form method="POST">
@@ -1274,7 +1877,10 @@ def sales():
                     المنتج
                 </label>
 
-                <select name="product">
+
+                <select
+                    name="product"
+                >
 
                     {% for p in products %}
 
@@ -1293,6 +1899,7 @@ def sales():
                     اللون
                 </label>
 
+
                 <input
                     name="color"
                     placeholder="Beige"
@@ -1303,6 +1910,7 @@ def sales():
                 <label>
                     الكمية
                 </label>
+
 
                 <input
                     type="number"
@@ -1321,10 +1929,13 @@ def sales():
 
             </form>
 
+
             {% else %}
 
             <div class="empty">
+
                 لا توجد منتجات للبيع.
+
             </div>
 
             {% endif %}
@@ -1338,41 +1949,60 @@ def sales():
                 آخر المبيعات
             </h2>
 
+
             {% for s in sales %}
 
             <div class="product">
 
                 <div class="product-name">
+
                     🧾 فاتورة
                     #{{ "%05d"|format(s.invoice) }}
+
                 </div>
 
+
                 <div class="info">
+
                     المنتج:
                     {{ s.product }}
+
                 </div>
 
+
                 <div class="info">
+
                     اللون:
                     {{ s.color }}
+
                 </div>
 
+
                 <div class="info">
+
                     الكمية:
                     {{ s.quantity }}
+
                 </div>
 
+
                 <div class="info">
+
                     الإجمالي:
                     {{ "%.0f"|format(s.total) }}
                     DA
+
                 </div>
 
+
                 <div class="info">
+
                     {{ s.date }}
                     —
                     {{ s.time }}
+
                 </div>
+
 
                 <a
                     class="btn"
@@ -1383,10 +2013,13 @@ def sales():
 
             </div>
 
+
             {% else %}
 
             <div class="empty">
+
                 لا توجد مبيعات حتى الآن.
+
             </div>
 
             {% endfor %}
@@ -1396,8 +2029,10 @@ def sales():
     </div>
 
 
-    <a class="back"
-       href="/">
+    <a
+        class="back"
+        href="/"
+    >
         ← العودة
     </a>
 
@@ -1406,9 +2041,13 @@ def sales():
     return page(
         "المبيعات",
         body,
+
         products=d["products"],
+
         sales=list(
-            reversed(d["sales"])
+            reversed(
+                d["sales"]
+            )
         )[:10]
     )
 
@@ -1417,23 +2056,38 @@ def sales():
 # الفاتورة
 # =========================================================
 
-@app.route("/invoice/<int:n>")
+@app.route(
+    "/invoice/<int:n>"
+)
 def invoice(n):
 
     d = load_data()
 
+
     s = next(
+
         (
             x
-            for x in d["sales"]
-            if x.get("invoice") == n
+
+            for x
+            in d["sales"]
+
+            if x.get(
+                "invoice"
+            ) == n
+
         ),
+
         None
+
     )
+
 
     if not s:
 
-        return redirect("/sales")
+        return redirect(
+            "/sales"
+        )
 
 
     body = """
@@ -1443,48 +2097,69 @@ def invoice(n):
         <div class="invoice">
 
             <div class="invoice-title">
+
                 🧾 الفاتورة
+
             </div>
 
 
             <div class="invoice-line">
+
                 رقم الفاتورة:
+
                 <strong>
+
                     {{ "%05d"|format(s.invoice) }}
+
                 </strong>
+
             </div>
 
 
             <div class="invoice-line">
+
                 المنتج:
+
                 <strong>
                     {{ s.product }}
                 </strong>
+
             </div>
 
 
             <div class="invoice-line">
+
                 اللون:
+
                 <strong>
                     {{ s.color }}
                 </strong>
+
             </div>
 
 
             <div class="invoice-line">
+
                 الكمية:
+
                 <strong>
                     {{ s.quantity }}
                 </strong>
+
             </div>
 
 
             <div class="invoice-line">
+
                 سعر القطعة:
+
                 <strong>
+
                     {{ "%.0f"|format(s.price) }}
                     DA
+
                 </strong>
+
             </div>
 
 
@@ -1513,11 +2188,13 @@ def invoice(n):
             </div>
 
 
-            <div style="
+            <div
+                style="
                 text-align:center;
                 margin-top:25px;
                 font-size:18px
-            ">
+                "
+            >
 
                 شكراً لزيارتكم ❤️
 
@@ -1528,7 +2205,9 @@ def invoice(n):
                 class="print-btn no-print"
                 onclick="window.print()"
             >
+
                 🖨️ طباعة / حفظ الفاتورة
+
             </button>
 
 
@@ -1536,7 +2215,9 @@ def invoice(n):
                 class="btn no-print"
                 href="/sales"
             >
+
                 ← العودة للمبيعات
+
             </a>
 
         </div>
@@ -1544,6 +2225,7 @@ def invoice(n):
     </div>
 
     """
+
 
     return page(
         "الفاتورة",
@@ -1556,24 +2238,43 @@ def invoice(n):
 # الإحصائيات
 # =========================================================
 
-@app.route("/statistics")
+@app.route(
+    "/statistics"
+)
 def statistics():
 
     d = load_data()
 
+
     stock = sum(
-        sum(p["colors"].values())
-        for p in d["products"]
+
+        sum(
+            p["colors"].values()
+        )
+
+        for p
+        in d["products"]
+
     )
+
 
     sold = sum(
+
         s["quantity"]
-        for s in d["sales"]
+
+        for s
+        in d["sales"]
+
     )
 
+
     rev = sum(
+
         s["total"]
-        for s in d["sales"]
+
+        for s
+        in d["sales"]
+
     )
 
 
@@ -1592,10 +2293,13 @@ def statistics():
 
         <div class="card">
 
+
             <div class="stat">
 
                 <div class="stat-number">
+
                     {{ pc }}
+
                 </div>
 
                 عدد المنتجات
@@ -1606,7 +2310,9 @@ def statistics():
             <div class="stat">
 
                 <div class="stat-number">
+
                     {{ stock }}
+
                 </div>
 
                 القطع الموجودة
@@ -1617,7 +2323,9 @@ def statistics():
             <div class="stat">
 
                 <div class="stat-number">
+
                     {{ sold }}
+
                 </div>
 
                 القطع المباعة
@@ -1628,32 +2336,44 @@ def statistics():
             <div class="stat">
 
                 <div class="stat-number">
+
                     {{ "%.0f"|format(rev) }}
                     DA
+
                 </div>
 
                 إجمالي المبيعات
 
             </div>
 
+
         </div>
 
     </div>
 
 
-    <a class="back"
-       href="/">
+    <a
+        class="back"
+        href="/"
+    >
         ← العودة للرئيسية
     </a>
 
     """
 
+
     return page(
         "الإحصائيات",
         body,
-        pc=len(d["products"]),
+
+        pc=len(
+            d["products"]
+        ),
+
         stock=stock,
+
         sold=sold,
+
         rev=rev
     )
 
@@ -1662,7 +2382,9 @@ def statistics():
 # البحث
 # =========================================================
 
-@app.route("/search")
+@app.route(
+    "/search"
+)
 def search():
 
     q = request.args.get(
@@ -1670,19 +2392,30 @@ def search():
         ""
     ).strip().lower()
 
+
     d = load_data()
 
+
     results = [
+
         p
-        for p in d["products"]
+
+        for p
+        in d["products"]
+
         if q in p["name"].lower()
+
     ]
 
 
     body = """
 
     <div class="header">
-        <h1>🔎 البحث</h1>
+
+        <h1>
+            🔎 البحث
+        </h1>
+
     </div>
 
 
@@ -1698,8 +2431,13 @@ def search():
                     value="{{ q }}"
                 >
 
-                <button class="btn">
+
+                <button
+                    class="btn"
+                >
+
                     🔎 بحث
+
                 </button>
 
             </form>
@@ -1714,16 +2452,24 @@ def search():
             <div class="product">
 
                 <div class="product-name">
+
                     {{ p.name }}
+
                 </div>
 
+
                 <div class="info">
+
                     السعر:
+
                     {{ "%.0f"|format(p.price) }}
+
                     DA
+
                 </div>
 
             </div>
+
 
             {% else %}
 
@@ -1748,12 +2494,15 @@ def search():
     </div>
 
 
-    <a class="back"
-       href="/">
+    <a
+        class="back"
+        href="/"
+    >
         ← العودة
     </a>
 
     """
+
 
     return page(
         "البحث",
@@ -1767,20 +2516,30 @@ def search():
 # المخزون المنخفض
 # =========================================================
 
-@app.route("/low-stock")
+@app.route(
+    "/low-stock"
+)
 def low_stock():
 
     d = load_data()
 
+
     low = [
+
         (
             p["name"],
             c,
             q
         )
-        for p in d["products"]
-        for c, q in p["colors"].items()
+
+        for p
+        in d["products"]
+
+        for c, q
+        in p["colors"].items()
+
         if q <= 3
+
     ]
 
 
@@ -1804,21 +2563,31 @@ def low_stock():
             <div class="warning">
 
                 <strong>
+
                     {{ name }}
+
                 </strong>
 
+
                 <br>
+
 
                 اللون:
+
                 {{ color }}
+
 
                 <br>
 
+
                 المتبقي:
+
                 {{ q }}
+
                 قطعة
 
             </div>
+
 
             {% else %}
 
@@ -1835,12 +2604,15 @@ def low_stock():
     </div>
 
 
-    <a class="back"
-       href="/">
+    <a
+        class="back"
+        href="/"
+    >
         ← العودة
     </a>
 
     """
+
 
     return page(
         "المخزون المنخفض",
@@ -1850,13 +2622,23 @@ def low_stock():
 
 
 # =========================================================
-# تشغيل التطبيق
+# بدء التطبيق
 # =========================================================
+
+init_database()
+
 
 if __name__ == "__main__":
 
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
     app.run(
         host="0.0.0.0",
-        port=5000,
+        port=port,
         debug=False
     )
