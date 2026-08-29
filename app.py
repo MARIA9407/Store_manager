@@ -318,7 +318,7 @@ def statistics():
     m_rev = sum(s.get("total", 0) for s in month_sales)
     m_prof = sum(s.get("profit", 0) for s in month_sales)
 
-    # تجميع المبيعات لكل منتج مع ضمان شمول جميع المنتجات المسجلة
+    # حصر جميع المنتجات الموجودة في المتجر وإعطاؤها قيمة مبيعات ابتدائية 0
     product_stats = {p["name"]: 0 for p in d["products"]}
     for s in d["sales"]:
         p_name = s.get("product", "غير معروف")
@@ -328,13 +328,17 @@ def statistics():
         else:
             product_stats[p_name] = qty
         
+    # ترتيب المنتجات تنازلياً حسب الأكثر مبيعاً
     sorted_products = sorted(product_stats.items(), key=lambda x: x[1], reverse=True)
     
-    # الأكثر مبيعاً: المنتجات التي بيع منها أكثر من 0
-    top_products = [item for item in sorted_products if item[1] > 0][:5]
+    # 1. أكثر المنتجات مبيعاً: المنتجات التي حققت مبيعات أكبر من 0 وتتصدر القائمة
+    top_products = [item for item in sorted_products if item[1] > 0]
     
-    # الراكدة: المنتجات التي مبيعاتها تساوي 0 تماماً (لا تظهر في الأكثر مبيعاً أبداً)
-    low_products = [item for item in sorted_products if item[1] == 0]
+    # أسماء المنتجات في قائمة الأكثر مبيعاً لمنع تكرارها نهائياً في الراكدة
+    top_names = {item[0] for item in top_products}
+    
+    # 2. المنتجات الراكدة: المنتجات التي لم يُبَع منها أي شيء (0) تماماً وغير موجودة في قائمة الأكثر مبيعاً
+    low_products = [item for item in sorted_products if item[1] == 0 and item[0] not in top_names]
 
     body="""<div class="header"><h1>📊 التقارير والإحصائيات الشاملة</h1></div>
     <div class="container">
