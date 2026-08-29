@@ -5,10 +5,13 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 DATA_FILE = "store_data.json"
 
+def get_local_time():
+    return datetime.utcnow() + timedelta(hours=1)
+
 def load_data():
     if not os.path.exists(DATA_FILE):
-        expiry_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
-        return {"products": [], "sales": [], "invoice_number": 1, "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "expiry_date": expiry_date}
+        expiry_date = (get_local_time() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+        return {"products": [], "sales": [], "invoice_number": 1, "created_at": get_local_time().strftime("%Y-%m-%d %H:%M"), "expiry_date": expiry_date}
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
@@ -16,10 +19,10 @@ def load_data():
         d.setdefault("sales", [])
         d.setdefault("invoice_number", 1)
         if "expiry_date" not in d:
-            d["expiry_date"] = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+            d["expiry_date"] = (get_local_time() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
         return d
     except:
-        expiry_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
+        expiry_date = (get_local_time() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M")
         return {"products": [], "sales": [], "invoice_number": 1, "expiry_date": expiry_date}
 
 def save_data(d):
@@ -59,7 +62,7 @@ def check_trial():
     d = load_data()
     try:
         expiry = datetime.strptime(d["expiry_date"], "%Y-%m-%d %H:%M")
-        if datetime.now() > expiry:
+        if get_local_time() > expiry:
             return False
     except:
         pass
@@ -215,7 +218,7 @@ def sales():
                 total = qty * p["price"]
                 total_cost = qty * p.get("cost_price", 0)
                 profit = total - total_cost
-                now = datetime.now()
+                now = get_local_time()
                 d["sales"].append({
                     "invoice": inv,
                     "product": p["name"],
@@ -288,8 +291,8 @@ def statistics():
     if not check_trial(): return redirect("/")
     d = load_data()
     
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    now_dt = datetime.now()
+    now_dt = get_local_time()
+    today_str = now_dt.strftime("%Y-%m-%d")
     
     day_sales = [s for s in d["sales"] if s.get("date") == today_str]
     week_ago = now_dt - timedelta(days=7)
@@ -315,15 +318,23 @@ def statistics():
     m_rev = sum(s.get("total", 0) for s in month_sales)
     m_prof = sum(s.get("profit", 0) for s in month_sales)
 
-    product_stats = {}
+    # تجميع المبيعات لكل منتج مع ضمان شمول جميع المنتجات المسجلة
+    product_stats = {p["name"]: 0 for p in d["products"]}
     for s in d["sales"]:
         p_name = s.get("product", "غير معروف")
         qty = s.get("quantity", 0)
-        product_stats[p_name] = product_stats.get(p_name, 0) + qty
+        if p_name in product_stats:
+            product_stats[p_name] += qty
+        else:
+            product_stats[p_name] = qty
         
     sorted_products = sorted(product_stats.items(), key=lambda x: x[1], reverse=True)
-    top_products = sorted_products[:5]
-    low_products = sorted(product_stats.items(), key=lambda x: x[1])[:5]
+    
+    # الأكثر مبيعاً: المنتجات التي بيع منها أكثر من 0
+    top_products = [item for item in sorted_products if item[1] > 0][:5]
+    
+    # الراكدة: المنتجات التي مبيعاتها تساوي 0 تماماً (لا تظهر في الأكثر مبيعاً أبداً)
+    low_products = [item for item in sorted_products if item[1] == 0]
 
     body="""<div class="header"><h1>📊 التقارير والإحصائيات الشاملة</h1></div>
     <div class="container">
@@ -360,7 +371,7 @@ def statistics():
                 </div>
             {% endfor %}
         {% else %}
-            <div class="empty">لا توجد بيانات مبيعات كافية بعد.</div>
+            <div class="empty">لا توجد مبيعات مسجلة حتى الآن.</div>
         {% endif %}
     </div>
 
@@ -370,11 +381,11 @@ def statistics():
             {% for name, q in low_products %}
                 <div class="stat-row">
                     <span>📦 <strong>{{ name }}</strong></span>
-                    <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة فقط</span>
+                    <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة</span>
                 </div>
             {% endfor %}
         {% else %}
-            <div class="empty">لا توجد بيانات مبيعات كافية بعد.</div>
+            <div class="empty">لا توجد منتجات راكدة (جميع المنتجات تم بيعها).</div>
         {% endif %}
     </div>
 
