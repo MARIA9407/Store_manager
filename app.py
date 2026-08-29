@@ -43,7 +43,6 @@ label{display:block;font-size:17px;font-weight:bold;margin-top:8px}.product{bord
 .back{display:block;text-align:center;margin:20px;color:#2563eb;text-decoration:none;font-size:18px}
 .invoice-title{text-align:center;font-size:26px;font-weight:bold;margin-bottom:20px}.invoice-line{border-bottom:1px dashed #aaa;padding:10px 0;font-size:17px}
 .invoice-total{font-size:22px;font-weight:bold;text-align:center;margin-top:20px}.print-btn{background:#111827;color:#fff;border:0;border-radius:14px;padding:16px;width:100%;font-size:18px;margin-top:20px}
-.stat-row {display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; direction: rtl;}
 
 @media print {
   body * { visibility: hidden; }
@@ -318,28 +317,6 @@ def statistics():
     m_rev = sum(s.get("total", 0) for s in month_sales)
     m_prof = sum(s.get("profit", 0) for s in month_sales)
 
-    # حصر جميع المنتجات الموجودة في المتجر وإعطاؤها قيمة مبيعات ابتدائية 0
-    product_stats = {p["name"]: 0 for p in d["products"]}
-    for s in d["sales"]:
-        p_name = s.get("product", "غير معروف")
-        qty = s.get("quantity", 0)
-        if p_name in product_stats:
-            product_stats[p_name] += qty
-        else:
-            product_stats[p_name] = qty
-        
-    # ترتيب المنتجات تنازلياً حسب الأكثر مبيعاً
-    sorted_products = sorted(product_stats.items(), key=lambda x: x[1], reverse=True)
-    
-    # 1. أكثر المنتجات مبيعاً: المنتجات التي حققت مبيعات أكبر من 0 وتتصدر القائمة
-    top_products = [item for item in sorted_products if item[1] > 0]
-    
-    # أسماء المنتجات في قائمة الأكثر مبيعاً لمنع تكرارها نهائياً في الراكدة
-    top_names = {item[0] for item in top_products}
-    
-    # 2. المنتجات الراكدة: المنتجات التي لم يُبَع منها أي شيء (0) تماماً وغير موجودة في قائمة الأكثر مبيعاً
-    low_products = [item for item in sorted_products if item[1] == 0 and item[0] not in top_names]
-
     body="""<div class="header"><h1>📊 التقارير والإحصائيات الشاملة</h1></div>
     <div class="container">
     
@@ -365,37 +342,9 @@ def statistics():
         </div>
     </div>
 
-    <div class="card">
-        <h2>🔥 أكثر المنتجات مبيعاً</h2>
-        {% if top_products %}
-            {% for name, q in top_products %}
-                <div class="stat-row">
-                    <span>📦 <strong>{{ name }}</strong></span>
-                    <span style="color:#2563eb; font-weight:bold;">{{ q }} قطعة مباعة</span>
-                </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty">لا توجد مبيعات مسجلة حتى الآن.</div>
-        {% endif %}
-    </div>
-
-    <div class="card">
-        <h2>❄️ أقل المنتجات مبيعاً (الراكدة)</h2>
-        {% if low_products %}
-            {% for name, q in low_products %}
-                <div class="stat-row">
-                    <span>📦 <strong>{{ name }}</strong></span>
-                    <span style="color:#dc2626; font-weight:bold;">{{ q }} قطعة مباعة</span>
-                </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty">لا توجد منتجات راكدة (جميع المنتجات تم بيعها).</div>
-        {% endif %}
-    </div>
-
     </div><a class="back" href="/">← العودة للرئيسية</a>"""
     
-    return page("الإحصائيات والأرباح", body, d_rev=d_rev, d_prof=d_prof, w_rev=w_rev, w_prof=w_prof, m_rev=m_rev, m_prof=m_prof, top_products=top_products, low_products=low_products)
+    return page("الإحصائيات والأرباح", body, d_rev=d_rev, d_prof=d_prof, w_rev=w_rev, w_prof=w_prof, m_rev=m_rev, m_prof=m_prof)
 
 @app.route("/search")
 def search():
